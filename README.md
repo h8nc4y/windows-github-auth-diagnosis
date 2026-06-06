@@ -1,5 +1,7 @@
 # windows-github-auth-diagnosis
 
+[![Validate](https://github.com/h8nc4y/windows-github-auth-diagnosis/actions/workflows/validate.yml/badge.svg)](https://github.com/h8nc4y/windows-github-auth-diagnosis/actions/workflows/validate.yml)
+
 A Codex-style skill for diagnosing Windows GitHub authentication false negatives caused by agent or tool sandboxes that cannot read the Windows keyring.
 
 ## What It Solves
@@ -12,7 +14,7 @@ On Windows, a sandboxed agent command can make GitHub authentication look broken
 - Agent developers whose tools run `gh` or `git` inside a restricted sandbox.
 - Reviewers who need safe public summaries of GitHub authentication problems without exposing tokens, credentials, or real logs.
 
-## Install Or Clone
+## Install
 
 Clone the repository:
 
@@ -88,18 +90,22 @@ The examples use placeholders only. Do not replace them with secret values, raw 
 - No credential storage or token management.
 - No advice to rotate or reset credentials unless a real exposure or proven credential failure exists.
 
-## Validation And Scan
+## Validation
 
-Run the bundled private-marker scan from the repository root:
+Run the full local validation from the repository root:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\scan-private-markers.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1
 ```
 
-If `pwsh` is unavailable, run the same script with Windows PowerShell:
+If `pwsh` is available, the same checks can be run with:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1
+pwsh -NoProfile -File .\scripts\validate-oss-readiness.ps1
+pwsh -NoProfile -File .\scripts\test-scan-private-markers.ps1
+pwsh -NoProfile -File .\scripts\scan-private-markers.ps1
 ```
 
 Also run a skill frontmatter validation tool when available, and run Git whitespace checks before publishing:
@@ -107,6 +113,22 @@ Also run a skill frontmatter validation tool when available, and run Git whitesp
 ```bash
 git diff --check
 ```
+
+The GitHub Actions workflow runs the same local validation, scan self-test, private-marker scan, and whitespace check on pull requests and pushes to `main`.
+
+## Contributing
+
+Contributions are welcome when they make the diagnosis safer, clearer, or easier to verify. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+Keep all examples synthetic. Do not include tokens, credentials, auth cookies, private keys, OAuth codes, raw credential logs, customer data, private repository names, internal paths, or screenshots of credential stores.
+
+For local-only private markers, create an untracked `.private-markers.local` file with one literal marker per line, or set `WINDOWS_GITHUB_AUTH_DIAGNOSIS_PRIVATE_MARKERS` with newline-separated markers. The scanner reads these values but does not print the matched marker.
+
+## Security
+
+This repository is about credential-sensitive behavior. If you find a vulnerability, unsafe guidance, or accidental secret exposure, follow [SECURITY.md](SECURITY.md) and use private reporting for sensitive details.
+
+Public issues should summarize command classes, error classes, classification, and safe next steps only.
 
 ## License
 
