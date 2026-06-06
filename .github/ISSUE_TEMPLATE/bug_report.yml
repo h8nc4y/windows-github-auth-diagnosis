@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a sanitized problem with the skill or examples.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not paste tokens, auth cookies, private keys, raw credential logs, screenshots of credential stores, or customer data.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the observable problem without secret-bearing output.
+      placeholder: The skill classified a sandbox-only auth failure incorrectly when...
+    validations:
+      required: true
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: Symptom class
+      options:
+        - HTTP 401
+        - Bad credentials
+        - Invalid default token
+        - SEC_E_NO_CREDENTIALS
+        - Missing credentials
+        - Remote misconfiguration
+        - Branch protection
+        - Permission or scope issue
+        - Network issue
+        - Other sanitized symptom
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized-checks
+    attributes:
+      label: Sanitized checks performed
+      description: Summarize safe facts only. Do not paste raw token-bearing command output.
+      placeholder: |
+        Remote wiring: origin present
+        Credential helper: manager helper present
+        Keyring-capable gh proof: success
+        Keyring-capable git proof: ref returned
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: The skill should classify this as a sandbox false negative.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: The skill led the agent to report a generic auth blocker.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed tokens, cookies, private keys, OAuth credentials, customer data, and raw credential logs.
+          required: true

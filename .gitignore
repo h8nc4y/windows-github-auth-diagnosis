@@ -3,5 +3,6 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+.private-markers.local
 .cache/
 tmp/

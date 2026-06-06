@@ -18,40 +18,72 @@ if ([string]::IsNullOrWhiteSpace($Path)) {
 $root = (Resolve-Path -LiteralPath $Path).Path
 $ownRepoUrlPattern = '^https://github\.com/h8nc4y/windows-github-auth-diagnosis(?:\.git)?$'
 
-$rules = @(
-    @{ Name = 'openai-api-key-prefix'; Pattern = ('s' + 'k-'); Kind = 'literal' },
-    @{ Name = 'github-classic-token-prefix'; Pattern = ('g' + 'hp_'); Kind = 'literal' },
-    @{ Name = 'github-fine-grained-token-prefix'; Pattern = ('github' + '_pat_'); Kind = 'literal' },
-    @{ Name = 'slack-bot-token-prefix'; Pattern = ('xo' + 'xb-'); Kind = 'literal' },
-    @{ Name = 'bearer-token-header'; Pattern = ('Bearer' + ' '); Kind = 'literal' },
-    @{ Name = 'private-key-block'; Pattern = ('BEGIN ' + 'PRIVATE KEY'); Kind = 'literal' },
-    @{ Name = 'private-inventory-repo'; Pattern = ('h8nc4y' + '/codex-global-context'); Kind = 'literal' },
-    @{ Name = 'private-projects-path'; Pattern = ('D:' + '\Agent\Codex\Projects'); Kind = 'literal' },
-    @{ Name = 'private-user-path'; Pattern = ('C:' + '\Users\h8nc4'); Kind = 'literal' },
-    @{ Name = 'email-address'; Pattern = '\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b'; Kind = 'regex' },
-    @{ Name = 'windows-absolute-path'; Pattern = '\b[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\?){2,}'; Kind = 'regex' }
-)
+$rules = New-Object System.Collections.Generic.List[object]
+
+function Add-ScanRule {
+    param(
+        [string]$Name,
+        [string]$Pattern,
+        [ValidateSet('literal', 'regex')]
+        [string]$Kind
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Pattern)) {
+        return
+    }
+
+    $rules.Add([pscustomobject]@{
+        Name = $Name
+        Pattern = $Pattern
+        Kind = $Kind
+    }) | Out-Null
+}
+
+Add-ScanRule -Name 'openai-api-key-prefix' -Pattern ('s' + 'k-') -Kind 'literal'
+Add-ScanRule -Name 'github-classic-token-prefix' -Pattern ('g' + 'hp_') -Kind 'literal'
+Add-ScanRule -Name 'github-fine-grained-token-prefix' -Pattern ('github' + '_pat_') -Kind 'literal'
+Add-ScanRule -Name 'slack-bot-token-prefix' -Pattern ('xo' + 'xb-') -Kind 'literal'
+Add-ScanRule -Name 'bearer-token-header' -Pattern ('Bearer' + ' ') -Kind 'literal'
+Add-ScanRule -Name 'private-key-block' -Pattern ('BEGIN ' + 'PRIVATE KEY') -Kind 'literal'
+Add-ScanRule -Name 'email-address' -Pattern '\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b' -Kind 'regex'
+Add-ScanRule -Name 'windows-absolute-path' -Pattern '\b[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\?){2,}' -Kind 'regex'
+
+$localMarkerIndex = 0
+
+function Add-LocalMarker {
+    param([string]$Marker)
+
+    $trimmed = $Marker.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
+        return
+    }
+
+    $script:localMarkerIndex++
+    Add-ScanRule -Name "local-private-marker-$script:localMarkerIndex" -Pattern $trimmed -Kind 'literal'
+}
+
+$localMarkerFile = Join-Path $root '.private-markers.local'
+if (Test-Path -LiteralPath $localMarkerFile -PathType Leaf) {
+    foreach ($line in Get-Content -LiteralPath $localMarkerFile) {
+        Add-LocalMarker -Marker $line
+    }
+}
+
+$environmentMarkers = [Environment]::GetEnvironmentVariable('WINDOWS_GITHUB_AUTH_DIAGNOSIS_PRIVATE_MARKERS')
+if (-not [string]::IsNullOrWhiteSpace($environmentMarkers)) {
+    foreach ($line in ($environmentMarkers -split "\r?\n")) {
+        Add-LocalMarker -Marker $line
+    }
+}
 
 $githubUrlPattern = 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?'
 $findings = New-Object System.Collections.Generic.List[object]
 
-function Test-SelfReferenceLine {
-    param(
-        [string]$RelativePath,
-        [string]$Line
-    )
-
-    if ($RelativePath -eq 'scripts/scan-private-markers.ps1') {
-        return $true
-    }
-
-    return $false
-}
-
 $files = Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object {
     $_.FullName -notmatch '\\.git(\\|$)' -and
     $_.FullName -notmatch '\\node_modules(\\|$)' -and
-    $_.FullName -notmatch '\\.cache(\\|$)'
+    $_.FullName -notmatch '\\.cache(\\|$)' -and
+    $_.Name -ne '.private-markers.local'
 }
 
 foreach ($file in $files) {
@@ -66,12 +98,12 @@ foreach ($file in $files) {
         $lineNumber++
 
         foreach ($match in [regex]::Matches($line, $githubUrlPattern)) {
-            if ($match.Value -notmatch $ownRepoUrlPattern -and -not (Test-SelfReferenceLine -RelativePath $relative -Line $line)) {
+            if ($match.Value -notmatch $ownRepoUrlPattern) {
                 $findings.Add([pscustomobject]@{
                     File = $relative
                     Line = $lineNumber
                     Rule = 'non-allowlisted-github-repo-url'
-                    Match = $match.Value
+                    Match = '<redacted>'
                 }) | Out-Null
             }
         }
@@ -84,7 +116,7 @@ foreach ($file in $files) {
                 $matched = [regex]::IsMatch($line, $rule.Pattern, 'IgnoreCase')
             }
 
-            if ($matched -and -not (Test-SelfReferenceLine -RelativePath $relative -Line $line)) {
+            if ($matched) {
                 $findings.Add([pscustomobject]@{
                     File = $relative
                     Line = $lineNumber
@@ -102,4 +134,5 @@ if ($findings.Count -gt 0) {
     exit 1
 }
 
-Write-Host "Private marker scan passed for $root"
+Write-Host 'Private marker scan passed.'
+exit 0
