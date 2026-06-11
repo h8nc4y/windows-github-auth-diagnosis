@@ -19,4 +19,4 @@
 
 | ID | タスク名 | 出典 | 優先度 | 規模 | 状態 | メモ |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-001 | `docs/prepare-v0-1-0-release` の公開準備を完了する | 未マージ/WIPブランチ、open PRなし | 高 | S | todo | ローカル検証済み。PR作成前にbacklog追加commitを含めて検証し、push/PRまで進める。 |
+| T-001 | `docs/prepare-v0-1-0-release` の公開準備を完了する | 未マージ/WIPブランチ、open PRなし | 高 | S | done | PR #2を作成: https://github.com/h8nc4y/windows-github-auth-diagnosis/pull/2 |
