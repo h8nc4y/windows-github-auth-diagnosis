@@ -12,11 +12,11 @@
 | コード内 `TODO` / `FIXME` | 該当なし。 |
 | 失敗テスト / lint / 型チェック | 該当なし。`validate-oss-readiness.ps1`、`test-scan-private-markers.ps1`、`scan-private-markers.ps1`、`git diff --check` は通過。 |
 | `git status` 未コミット変更 | 該当なし。 |
-| 未マージ/WIPブランチ | `docs/prepare-v0-1-0-release` が `main` より1commit先行。open PRなし。 |
+| 未マージ/WIPブランチ | `docs/prepare-v0-1-0-release` が `main` より3commit先行。PR #2作成済み。 |
 | GitHub open issues | 該当なし。`gh issue list` は `[]`。 |
 
 ## タスク
 
 | ID | タスク名 | 出典 | 優先度 | 規模 | 状態 | メモ |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-001 | `docs/prepare-v0-1-0-release` の公開準備を完了する | 未マージ/WIPブランチ、open PRなし | 高 | S | done | PR #2を作成: https://github.com/h8nc4y/windows-github-auth-diagnosis/pull/2 |
+| T-001 | `docs/prepare-v0-1-0-release` の公開準備を完了する | 未マージ/WIPブランチ、open PRなし | 高 | S | done | PR #2を作成し、ブランチをpush済み: https://github.com/h8nc4y/windows-github-auth-diagnosis/pull/2 |
