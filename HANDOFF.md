@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/06/12 22:35:09 +09:00
+最終更新: 2026/06/12 23:39:34 +09:00
 
 ## リポジトリの目的
 
@@ -34,7 +34,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 
 ## 既知の問題・残懸念
 
-- 現時点の既知問題はなし。
+- 最新Validate runはsuccessだが、GitHub Actions annotationで `actions/checkout@v4` のNode.js 20非推奨と `windows-latest` リダイレクト予定が通知された。
 - `gh run list --json` は空出力だったため、CI確認は表形式の `gh run list` 出力で確認した。
 - 今後public issue/PRに診断ログを書く場合は、token、credential-bearing log、ローカル絶対パス、private repo名を含めないこと。
 
@@ -73,5 +73,5 @@ git diff --check
 ## 次にやるべき候補
 
 1. Claude Code側で `TASKS_BACKLOG.md` とこの `HANDOFF.md` を読み、mainがcleanか確認する。
-2. 新しい作業を始める場合は、別branchを切り、public-safe examplesとprivate-marker scanを維持する。
-3. 次のrelease作業が必要になった時点で、GitHub ReleaseやMarketplace登録の要否を別途判断する。
+2. T-003として記録したGitHub Actions annotationの対応要否を確認する。
+3. 新しい作業を始める場合は、別branchを切り、public-safe examplesとprivate-marker scanを維持する。
