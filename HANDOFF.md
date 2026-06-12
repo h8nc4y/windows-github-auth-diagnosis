@@ -25,7 +25,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | v0.1.0 CHANGELOG整理 | `1bbe257`, PR #2 merge `9d4d105` |
 | backlog棚卸し追加 | `405405a` |
 | release PRタスク完了状態記録 | `0fde279`, `9db4d6b`, `f5ee3d9` |
-| Codex締め・Claude Code引き継ぎ文書化 | この `HANDOFF.md` を追加するcommit |
+| Codex締め・Claude Code引き継ぎ文書化 | `2441fbc` |
 
 ## 未完了 / skip
 
