@@ -13,7 +13,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 - `TASKS_BACKLOG.md` に doing は残っていない。
 - open issue / open PR はどちらも0件。
 - 未mergeブランチはなし。`docs/prepare-v0-1-0-release` はPR #2でmerge済み。
-- main最新CIは `Validate` success（run `27345950504`、head `f5ee3d9`）。
+- mainの `Validate` workflow はpushごとに実行される。直近確認ではsuccess。最新runは `gh run list --repo h8nc4y/windows-github-auth-diagnosis --branch main --limit 3` で確認する。
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 
 ## 完了タスクとcommit
@@ -25,7 +25,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | v0.1.0 CHANGELOG整理 | `1bbe257`, PR #2 merge `9d4d105` |
 | backlog棚卸し追加 | `405405a` |
 | release PRタスク完了状態記録 | `0fde279`, `9db4d6b`, `f5ee3d9` |
-| Codex締め・Claude Code引き継ぎ文書化 | `2441fbc` |
+| Codex締め・Claude Code引き継ぎ文書化 | `2441fbc`（初回HANDOFF追加）。以降のhandoff metadata更新は `git log --oneline` 参照。 |
 
 ## 未完了 / skip
 
