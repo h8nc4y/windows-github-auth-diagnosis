@@ -12,10 +12,16 @@ permissions:
 jobs:
   validate:
     name: Validate skill repository
+    # windows-latest (Windows Server 2025) is intentional and left unpinned:
+    # this job only needs pwsh + git, so the runner image migration does not
+    # affect it. Pin to a dated label (e.g. windows-2022) only if a future step
+    # depends on image-specific preinstalled tooling.
     runs-on: windows-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        # checkout@v5 runs on Node.js 24; @v4 ran on Node.js 20, which the runner
+        # now flags as deprecated. Bump majors to silence that annotation.
+        uses: actions/checkout@v5
 
       - name: Validate OSS readiness
         shell: pwsh

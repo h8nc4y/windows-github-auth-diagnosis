@@ -12,6 +12,7 @@ The format follows Keep a Changelog conventions.
 
 ### Changed
 
+- Upgrade the validation workflow to `actions/checkout@v5` (Node.js 24) to clear the Node.js 20 runner deprecation warning, and document why `windows-latest` is left unpinned.
 - Revise README Non-Goals so distribution (GitHub Releases, Codex and Claude Code installs, a future plugin or marketplace entry, packaging) is in scope, while credential-handling boundaries remain out of scope.
 
 ## 0.1.0 - 2026-06-06
