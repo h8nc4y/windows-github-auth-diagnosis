@@ -23,6 +23,8 @@ git clone https://github.com/h8nc4y/windows-github-auth-diagnosis.git
 cd windows-github-auth-diagnosis
 ```
 
+### Codex (agent skills)
+
 Manual Codex-style skill install on shells with POSIX syntax:
 
 ```bash
@@ -47,6 +49,35 @@ Copy-Item -LiteralPath .\SKILL.md -Destination (Join-Path $dest 'SKILL.md')
 ```
 
 The guard is intentional: do not overwrite an existing installed skill without reviewing the local copy first.
+
+### Claude Code
+
+The same `SKILL.md` works in Claude Code; its `name` and `description` frontmatter are compatible, so no edits are needed. Claude Code auto-invokes the skill when a task matches the description.
+
+Install for your user account on shells with POSIX syntax:
+
+```bash
+dest="${HOME}/.claude/skills/windows-github-auth-diagnosis"
+if [ -e "$dest" ]; then
+  echo "Install target already exists: $dest"
+  exit 1
+fi
+mkdir -p "$dest"
+cp SKILL.md "$dest/SKILL.md"
+```
+
+Install for your user account from PowerShell:
+
+```powershell
+$dest = Join-Path $HOME '.claude\skills\windows-github-auth-diagnosis'
+if (Test-Path -LiteralPath $dest) {
+  throw "Install target already exists: $dest"
+}
+New-Item -ItemType Directory -Path $dest | Out-Null
+Copy-Item -LiteralPath .\SKILL.md -Destination (Join-Path $dest 'SKILL.md')
+```
+
+To scope the skill to a single project instead, copy `SKILL.md` to `.claude/skills/windows-github-auth-diagnosis/SKILL.md` inside that project's repository.
 
 ## Manual Use
 
@@ -84,11 +115,12 @@ The examples use placeholders only. Do not replace them with secret values, raw 
 
 ## Non-Goals
 
-- No GitHub Release creation.
-- No Marketplace registration.
-- No package publishing.
+These are permanent safety boundaries and stay out of scope:
+
 - No credential storage or token management.
 - No advice to rotate or reset credentials unless a real exposure or proven credential failure exists.
+
+Distribution is now in scope. Publishing GitHub Releases, offering Codex and Claude Code install paths, a future plugin or marketplace entry, and packaging for distribution are explicitly allowed, provided the safety boundaries above and the [Safety Notes](#safety-notes) are preserved.
 
 ## Validation
 
