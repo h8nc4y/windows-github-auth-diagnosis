@@ -6,7 +6,13 @@ The format follows Keep a Changelog conventions.
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- Claude Code install instructions for user-level and project-level skill paths.
+
+### Changed
+
+- Revise README Non-Goals so distribution (GitHub Releases, Codex and Claude Code installs, a future plugin or marketplace entry, packaging) is in scope, while credential-handling boundaries remain out of scope.
 
 ## 0.1.0 - 2026-06-06
 

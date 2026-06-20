@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/06/12 23:39:34 +09:00
+最終更新: 2026/06/20 23:34:39 +09:00
 
 ## リポジトリの目的
 
@@ -8,12 +8,11 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 
 ## 現状サマリ
 
-- `main` は `origin/main` と一致している。
-- 未コミット変更は締め作業開始時点でなし。締め作業では `TASKS_BACKLOG.md` 更新と `HANDOFF.md` 作成のみを行う。
-- `TASKS_BACKLOG.md` に doing は残っていない。
-- open issue / open PR はどちらも0件。
-- 未mergeブランチはなし。`docs/prepare-v0-1-0-release` はPR #2でmerge済み。
-- mainの `Validate` workflow はpushごとに実行される。直近確認ではsuccess。最新runは `gh run list --repo h8nc4y/windows-github-auth-diagnosis --branch main --limit 3` で確認する。
+- `chore/distribution-readiness` のWIPは、docs変更とGitHub Actions変更が混在していたため、briefの§15に従って分離した。
+- T-004（README Non-Goals改訂）とT-005（Claude Code install手順追加）はdocs変更として完了扱い。`README.md`、`CHANGELOG.md`、`TASKS_BACKLOG.md`に反映済み。
+- T-003（`actions/checkout@v5`への更新と`windows-latest`据え置きコメント）はゲート①に該当するため、このdocs変更から外して別PRで扱う。
+- open issue / open PR は着手時点でどちらも0件。mainの直近Validateはsuccess。
+- GitHub認証はkeyring-capable経路で確認済み。`gh auth status` は `state=success` / `tokenSource=keyring`、`gh api user` は想定アカウント、`git ls-remote origin HEAD` はrefを返した。
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 
 ## 完了タスクとcommit
@@ -26,21 +25,24 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | backlog棚卸し追加 | `405405a` |
 | release PRタスク完了状態記録 | `0fde279`, `9db4d6b`, `f5ee3d9` |
 | Codex締め・Claude Code引き継ぎ文書化 | `2441fbc`（初回HANDOFF追加）。以降のhandoff metadata更新は `git log --oneline` 参照。 |
+| T-004/T-005 docs整備 | このhandoff更新と同じdocs PRで完了予定。 |
 
-## 未完了 / skip
+## 未完了 / 承認待ち
 
-- 未完了タスクなし。
-- skipタスクなし。
+- T-003: GitHub Actions変更。`.github/workflows/validate.yml` を変更するため、PR作成までは自走可だがmerge直前で人間承認が必要。
+- T-006: 初のGitHub Release / tag。Release notesとtag案の準備は可能だが、tag pushとrelease作成は人間承認後に行う。
+- T-007: Claude Codeプラグイン化とmarketplace配布の評価。評価は自走可、配布物構成の新設や実公開はゲート判断が必要。
+- T-008: 配布チャネル拡張の調査。調査のみ自走可。
 
 ## 既知の問題・残懸念
 
-- 最新Validate runはsuccessだが、GitHub Actions annotationで `actions/checkout@v4` のNode.js 20非推奨と `windows-latest` リダイレクト予定が通知された。
-- `gh run list --json` は空出力だったため、CI確認は表形式の `gh run list` 出力で確認した。
-- 今後public issue/PRに診断ログを書く場合は、token、credential-bearing log、ローカル絶対パス、private repo名を含めないこと。
+- `actions/checkout@v4` のNode.js 20非推奨annotationに対応するため、T-003の別PRが必要。
+- Release作成はゲート①のため、T-003 merge後も人間承認なしには実行しない。
+- public issue/PRに診断ログを書く場合は、token、credential-bearing log、ローカル絶対パス、private repo名を含めないこと。
 
 ## 最終検証結果
 
-2026/06/12 22:35 JSTに実行:
+2026/06/20 23:34 JSTに実行:
 
 | コマンド | 結果 |
 | --- | --- |
@@ -48,9 +50,6 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
 | `git diff --check` | pass |
-| `gh issue list --repo h8nc4y/windows-github-auth-diagnosis --limit 50 --json number,title,state,labels,updatedAt` | `[]` |
-| `gh pr list --repo h8nc4y/windows-github-auth-diagnosis --state open --limit 50 --json number,title,state,url,headRefName,baseRefName,mergeStateStatus` | `[]` |
-| `gh run list --repo h8nc4y/windows-github-auth-diagnosis --branch main --limit 3` | latest `Validate` success |
 
 ## セットアップ・検証コマンド
 
@@ -65,13 +64,14 @@ git diff --check
 
 ## ブランチ状況
 
-- active branch: `main`
+- docs branch: `chore/distribution-readiness`
+- next gated branch: `chore/ci-checkout-v5`
 - upstream: `origin/main`
-- 未mergeブランチ: なし
-- open PR: なし
+- open PR: 着手時点ではなし
 
 ## 次にやるべき候補
 
-1. Claude Code側で `TASKS_BACKLOG.md` とこの `HANDOFF.md` を読み、mainがcleanか確認する。
-2. T-003として記録したGitHub Actions annotationの対応要否を確認する。
-3. 新しい作業を始める場合は、別branchを切り、public-safe examplesとprivate-marker scanを維持する。
+1. docs変更の `check:all` 相当を通し、PRを作成して自走mergeする。
+2. `main` から `chore/ci-checkout-v5` を切り、T-003のGitHub Actions変更と対応するCHANGELOG行を入れてPRを作成する。
+3. T-003 PRは、人間のゲート①承認を得てからmergeする。
+4. T-003 merge後、T-006のRelease notesとtag案を用意し、Release/tag実行前に人間承認を得る。
