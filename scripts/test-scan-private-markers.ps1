@@ -56,7 +56,10 @@ New-Item -ItemType Directory -Path $tempRoot | Out-Null
 try {
     $cleanRoot = Join-Path $tempRoot 'clean'
     New-Item -ItemType Directory -Path $cleanRoot | Out-Null
-    Set-Content -LiteralPath (Join-Path $cleanRoot 'README.md') -Value '# Clean synthetic fixture' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $cleanRoot 'README.md') -Value @(
+        '# Clean synthetic fixture'
+        'See docs/codex-task-scanner-hardening.md for scanner hardening notes.'
+    ) -Encoding UTF8
 
     $cleanResult = Invoke-Scanner -ScanPath $cleanRoot
     if ($cleanResult.ExitCode -ne 0) {
@@ -74,6 +77,66 @@ try {
     }
     if ($markerResult.Output -notmatch 'github-classic-token-prefix') {
         Add-Failure "Expected synthetic marker output to name github-classic-token-prefix. Output: $($markerResult.Output.Trim())"
+    }
+
+    # Higher-recall cloud / PEM prefixes, with one redaction regression each.
+    # Fixtures are synthetic placeholders only; no real secrets are used.
+    $prefixCases = @(
+        @{ Rule = 'openai-api-key-prefix';            Marker = ('s' + 'k-') + 'SyntheticOpenAI000000000000' }
+        @{ Rule = 'aws-access-key-id';                Marker = ('A' + 'KIA') + 'EXAMPLE0000000000000' }
+        @{ Rule = 'gcp-api-key-prefix';               Marker = ('AIza') + 'Synthetic0000000000000000000000000000' }
+        @{ Rule = 'slack-user-token-prefix';          Marker = ('xo' + 'xp-') + 'synthetic-placeholder' }
+        @{ Rule = 'slack-legacy-app-token-prefix';    Marker = ('xo' + 'xa-') + 'synthetic-placeholder' }
+        @{ Rule = 'slack-app-level-token-prefix';     Marker = ('xa' + 'pp-') + 'synthetic-placeholder' }
+        @{ Rule = 'stripe-live-secret-key';           Marker = ('s' + 'k') + '_live_SyntheticPlaceholder0000' }
+        @{ Rule = 'pem-private-key-block';            Marker = '-----' + ('BEGIN ' + 'OPENSSH PRIVATE KEY') + '-----' }
+    )
+
+    foreach ($case in $prefixCases) {
+        $prefixRoot = Join-Path $tempRoot ('prefix-' + $case.Rule)
+        New-Item -ItemType Directory -Path $prefixRoot | Out-Null
+        Set-Content -LiteralPath (Join-Path $prefixRoot 'leak.txt') -Value "synthetic marker: $($case.Marker)" -Encoding UTF8
+
+        $prefixResult = Invoke-Scanner -ScanPath $prefixRoot
+        if ($prefixResult.ExitCode -eq 0) {
+            Add-Failure "Expected $($case.Rule) fixture to fail, but scanner exited 0."
+        }
+        if ($prefixResult.Output -notmatch [regex]::Escape($case.Rule)) {
+            Add-Failure "Expected output to name $($case.Rule). Output: $($prefixResult.Output.Trim())"
+        }
+        # Preserve redaction: the raw marker value must never appear in output.
+        if ($prefixResult.Output.Contains($case.Marker)) {
+            Add-Failure "Expected $($case.Rule) finding to be redacted, but the raw marker leaked into output."
+        }
+        if ($prefixResult.Output -notmatch '<redacted>') {
+            Add-Failure "Expected $($case.Rule) finding to report '<redacted>'. Output: $($prefixResult.Output.Trim())"
+        }
+    }
+
+    # windows-absolute-path: private-looking paths should be findings.
+    # Split the literal so this test file does not make the scanner flag itself.
+    $winPathRealRoot = Join-Path $tempRoot 'winpath-real'
+    New-Item -ItemType Directory -Path $winPathRealRoot | Out-Null
+    $realWinPath = 'C' + ':\Users\realperson\Secrets\config'
+    Set-Content -LiteralPath (Join-Path $winPathRealRoot 'doc.md') -Value "See $realWinPath for details." -Encoding UTF8
+    $winPathRealResult = Invoke-Scanner -ScanPath $winPathRealRoot
+    if ($winPathRealResult.ExitCode -eq 0) {
+        Add-Failure 'Expected real-looking Windows path fixture to fail, but scanner exited 0.'
+    }
+    if ($winPathRealResult.Output -notmatch 'windows-absolute-path') {
+        Add-Failure "Expected real Windows path output to name windows-absolute-path. Output: $($winPathRealResult.Output.Trim())"
+    }
+
+    # windows-absolute-path: documented placeholders should not be findings.
+    $winPathDocRoot = Join-Path $tempRoot 'winpath-doc'
+    New-Item -ItemType Directory -Path $winPathDocRoot | Out-Null
+    Set-Content -LiteralPath (Join-Path $winPathDocRoot 'doc.md') -Value @'
+Use a placeholder path such as C:\path\to\repo in examples.
+You can also write C:\Users\<name>\project to describe a user directory.
+'@ -Encoding UTF8
+    $winPathDocResult = Invoke-Scanner -ScanPath $winPathDocRoot
+    if ($winPathDocResult.ExitCode -ne 0) {
+        Add-Failure "Expected placeholder Windows path doc to pass, but scanner exited $($winPathDocResult.ExitCode): $($winPathDocResult.Output.Trim())"
     }
 
     $localMarkerRoot = Join-Path $tempRoot 'local-marker'

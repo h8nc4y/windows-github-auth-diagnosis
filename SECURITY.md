@@ -31,6 +31,16 @@ Public issues must not include:
 - Raw auth JSON that exposes account details you do not intend to publish.
 - Private repository names, internal paths, hostnames, customer data, or credential screenshots.
 
+## Scanner Coverage
+
+The private-marker scanner (`scripts/scan-private-markers.ps1`) is a best-effort
+safety net, not a guarantee. It scans git-tracked text files for a curated set of
+secret prefixes (GitHub, OpenAI, AWS, GCP, Slack, Stripe, PEM key blocks, and
+similar) plus configured local markers, and redacts any matched value. It does not
+detect every possible secret format and is no substitute for keeping real
+credentials out of the repository in the first place. Treat a passing scan as
+"no known marker found," not "definitely safe."
+
 ## Response Expectations
 
 Maintainers should acknowledge actionable security reports when available, remove or redact unsafe public material, and prefer guidance that reduces credential exposure risk. If real exposure is possible, rotate the affected secret outside this public repository and document only the remediation status.
