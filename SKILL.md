@@ -80,3 +80,8 @@ When reporting the diagnosis, include only safe facts:
 - keyring-capable proof result: success or failure
 - final classification: false negative, remote misconfiguration, permission/scope issue, branch protection, network issue, approval-layer blocker, or unresolved
 - next command to continue, if safe
+
+> Note: the repository's private-marker scanner (`scripts/scan-private-markers.ps1`)
+> is a best-effort guard against leaking secrets into public artifacts. It does not
+> recognize every secret format, so always sanitize reports and issues by hand
+> rather than relying on the scan alone.
