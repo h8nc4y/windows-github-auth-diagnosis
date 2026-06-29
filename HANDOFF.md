@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/06/20 23:34:39 +09:00
+最終更新: 2026/06/29 09:43 JST
 
 ## リポジトリの目的
 
@@ -8,11 +8,11 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 
 ## 現状サマリ
 
-- `chore/distribution-readiness` のWIPは、docs変更とGitHub Actions変更が混在していたため、briefの§15に従って分離した。
-- T-004（README Non-Goals改訂）とT-005（Claude Code install手順追加）はdocs変更として完了扱い。`README.md`、`CHANGELOG.md`、`TASKS_BACKLOG.md`に反映済み。
-- T-003（`actions/checkout@v5`への更新と`windows-latest`据え置きコメント）はゲート①に該当するため、このdocs変更から外して別PRで扱う。
-- open issue / open PR は着手時点でどちらも0件。mainの直近Validateはsuccess。
-- GitHub認証はkeyring-capable経路で確認済み。`gh auth status` は `state=success` / `tokenSource=keyring`、`gh api user` は想定アカウント、`git ls-remote origin HEAD` はrefを返した。
+- T-004（README Non-Goals改訂）とT-005（Claude Code install手順追加）は PR #3 で完了。
+- scanner hardening は PR #5 で完了。`main` へ merge `c6bafc7` 済み。
+- T-003（`actions/checkout@v5`への更新と`windows-latest`据え置きコメント）は PR #4 で完了。merge commit は `ff60b3e5829674342ca82bfb29e8fb285195387e`。
+- 2026/06/29 09:43 JST時点で open PR は0件。`main` は `origin/main` と同期済み。
+- GitHub認証はkeyring-capable経路で確認済み。token値やcredential-bearing logは記録していない。
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 
 ## 完了タスクとcommit
@@ -24,32 +24,36 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | v0.1.0 CHANGELOG整理 | `1bbe257`, PR #2 merge `9d4d105` |
 | backlog棚卸し追加 | `405405a` |
 | release PRタスク完了状態記録 | `0fde279`, `9db4d6b`, `f5ee3d9` |
-| Codex締め・Claude Code引き継ぎ文書化 | `2441fbc`（初回HANDOFF追加）。以降のhandoff metadata更新は `git log --oneline` 参照。 |
-| T-004/T-005 docs整備 | このhandoff更新と同じdocs PRで完了予定。 |
+| Codex締め・Claude Code引き継ぎ文書化 | `2441fbc` |
+| T-004/T-005 docs整備 | PR #3 merge `48c26e9` |
+| scanner hardening | PR #5 merge `c6bafc7` |
+| T-003 CI checkout v5 | PR #4 merge `ff60b3e` |
 
-## 未完了 / 承認待ち
+## 未完了 / 未実施
 
-- T-003: GitHub Actions変更。`.github/workflows/validate.yml` を変更するため、PR作成までは自走可だがmerge直前で人間承認が必要。
-- T-006: 初のGitHub Release / tag。Release notesとtag案の準備は可能だが、tag pushとrelease作成は人間承認後に行う。
-- T-007: Claude Codeプラグイン化とmarketplace配布の評価。評価は自走可、配布物構成の新設や実公開はゲート判断が必要。
+- T-006: 初のGitHub Release / tag。Release notesとtag案の準備が次候補。tag pushとrelease作成は未実施で、version番号・公開タイミングは未確認。
+- T-007: Claude Codeプラグイン化とmarketplace配布の評価。評価は自走可。配布物構成の新設や実公開は、現行停止条件と公開前チェックを確認してから実施する。
 - T-008: 配布チャネル拡張の調査。調査のみ自走可。
 
 ## 既知の問題・残懸念
 
-- `actions/checkout@v4` のNode.js 20非推奨annotationに対応するため、T-003の別PRが必要。
-- Release作成はゲート①のため、T-003 merge後も人間承認なしには実行しない。
+- T-003 の `actions/checkout@v5` 更新は PR #4 で完了。`windows-latest` は現在の pwsh+git 依存では pin せず維持する。
+- Release/tag は未実施。v0.2.0候補の確認、release notes、公開前チェックが残る。
 - public issue/PRに診断ログを書く場合は、token、credential-bearing log、ローカル絶対パス、private repo名を含めないこと。
 
 ## 最終検証結果
 
-2026/06/20 23:34 JSTに実行:
+2026/06/29 09:38 JST、PR #4 を最新 `origin/main` へ一時mergeした状態で実行:
 
 | コマンド | 結果 |
 | --- | --- |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1` | pass |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
-| `git diff --check` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
+| `git diff --check --cached` | pass |
 
 ## セットアップ・検証コマンド
 
@@ -64,14 +68,20 @@ git diff --check
 
 ## ブランチ状況
 
-- docs branch: `chore/distribution-readiness`
-- next gated branch: `chore/ci-checkout-v5`
-- upstream: `origin/main`
-- open PR: 着手時点ではなし
+- current branch: `docs/018-closeout-state`
+- upstream main: `origin/main` at PR #4 merge `ff60b3e`
+- local backup branch: `backup/018-main-pre-align-20260629`（PR #4/#5統合前の同一tree履歴を保存）
+- open PR: 2026/06/29 09:43 JST時点でなし
 
 ## 次にやるべき候補
 
-1. docs変更の `check:all` 相当を通し、PRを作成して自走mergeする。
-2. `main` から `chore/ci-checkout-v5` を切り、T-003のGitHub Actions変更と対応するCHANGELOG行を入れてPRを作成する。
-3. T-003 PRは、人間のゲート①承認を得てからmergeする。
-4. T-003 merge後、T-006のRelease notesとtag案を用意し、Release/tag実行前に人間承認を得る。
+1. この handoff/backlog 状態同期をPR化し、CI確認後にmergeする。
+2. 未追跡 `docs/CLAUDE_CODE_REVIEW_2026-06-21.md` と `docs/codex-task-scanner-hardening.md` を採用するか、別PR/破棄候補として整理する。
+3. T-006のRelease notesとtag案を用意する。Release/tag実行は version番号・公開タイミング・公開前チェックを確認してから行う。
+4. T-007/T-008としてClaude Codeプラグイン化と配布チャネルを調査する。
+
+## 2026/06/29 Codex checkpoint
+
+- PR #5 (`fix/scanner-hardening-split`) と PR #4 (`chore/ci-checkout-v5`) は `main` へmerge済み。
+- local `main` は内容同一を確認後、`backup/018-main-pre-align-20260629` を作ってから `origin/main` へsoft align済み。
+- 未追跡 advisory docs は引き続き未採用。非git一時ディレクトリへコピーして `scan-private-markers.ps1 -Path <temp>` のworking-tree scanがpass済みだが、公開採否は別タスク。
