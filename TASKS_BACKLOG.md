@@ -36,12 +36,12 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | todo | `.claude-plugin/plugin.json` + `skills/` 構成と `claude plugin validate` を評価。 |
 | T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | todo | パッケージ公開等の手段を調査のみ（実装は別途）。 |
 
-- 📌 2026-06-21 Claude Code 再レビュー: High 指摘の委譲タスク仕様 `docs/codex-task-scanner-hardening.md` は未追跡advisory docsとして別タスク扱い。横断索引: `CLAUDE_CODE_REVIEW_INDEX_2026-06-21.md`。
+- 📌 2026-06-21 Claude Code 再レビュー: ローカル advisory docs は2026/06/29に再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。以後は本backlogとtracked docsを正とする。
 
-- 🔧 2026-06-21 Claude Code 実装: scanner hardening は PR #5 としてmerge済み（merge `c6bafc7`）。関連WIPのadvisory docsは未追跡のまま別タスク扱い。
+- 🔧 2026-06-21 Claude Code 実装: scanner hardening は PR #5 としてmerge済み（merge `c6bafc7`）。未追跡advisory docsの原本は `.gitignore` で誤stage防止し、必要な事実はこの台帳へ圧縮済み。
 
 ## 2026/06/29 Codex checkpoint
 
 - PR #5 scanner hardening と PR #4 checkout v5 は `main` へmerge済み。local `main` は `origin/main` に同期済み。
 - PR #4は最新 `origin/main` に一時mergeして、Windows PowerShell 5.1 / pwsh の readiness・scanner self-test・git-tracked scan と `git diff --check --cached` を確認済み。
-- 未追跡 `docs/CLAUDE_CODE_REVIEW_2026-06-21.md` と `docs/codex-task-scanner-hardening.md` は、採用する場合も本状態同期とは別PRで扱う。
+- ローカル advisory docs は原本非採用・`.gitignore` 対象。PR #4/#5で解消済みの指摘を再タスク化せず、残タスクはT-006/T-007/T-008へ集約。
