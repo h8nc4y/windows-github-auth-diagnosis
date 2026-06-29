@@ -6,6 +6,7 @@
 更新: 2026/06/29 09:43 JST（Codex: PR #4/#5 merge後の状態へ同期）
 更新: 2026/06/29 16:16 JST（Codex: PR #7 advisory disposition後の状態へ同期）
 更新: 2026/06/29 22:19 JST（Codex: PR #9 release readiness brief後の状態へ同期）
+更新: 2026/06/30 02:14 JST（Codex: T-007 Claude Code plugin marketplace評価をdocs化）
 
 ## Goal
 
@@ -16,14 +17,14 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | 情報源 | 結果 |
 | --- | --- |
 | `TASKS_BACKLOG.md` / `TODO.md` / `TASKS.md` | このファイルを正として維持。`TODO.md` / `TASKS.md` は該当なし。 |
-| `HANDOFF.md` | CodexからClaude Codeへの引き継ぎ用に作成済み。2026/06/29にPR #9 release readiness brief後の状態へ更新。 |
-| `README.md` / `docs/` | `README.md` は検証手順を定義。`docs/release-v0.2.0-brief.md` / `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。未追跡advisory docsは別タスク扱い。 |
+| `HANDOFF.md` | CodexからClaude Codeへの引き継ぎ用に作成済み。2026/06/30にT-007 plugin marketplace評価後の状態へ更新。 |
+| `README.md` / `docs/` | `README.md` は検証手順を定義。`docs/release-v0.2.0-brief.md` / `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。`docs/claude-plugin-marketplace-evaluation.md` でT-007の評価を記録。未追跡advisory docsは別タスク扱い。 |
 | `AGENTS.md` / `.codex/` | ユーザー提示の `AGENTS.md` 指示を適用。リポジトリ内 `.codex/` は該当なし。 |
 | コード内 `TODO` / `FIXME` | 該当なし。 |
-| 失敗テスト / lint / 型チェック | 該当なし。2026/06/29 22:19 JST時点でWindows PowerShell 5.1 / pwsh の3本検証、`git diff --check`、Gitleaks は通過。 |
-| `git status` 未コミット変更 | `HANDOFF.md` / `TASKS_BACKLOG.md` は本PR #9後状態同期で更新。未追跡advisory docsは `.gitignore` 対象として原本非採用。 |
+| 失敗テスト / lint / 型チェック | 該当なし。2026/06/30 02:20 JST時点で `powershell` / `pwsh` の readiness・scanner self-test・git-tracked scan、`git diff --check --cached` は通過。 |
+| `git status` 未コミット変更 | `HANDOFF.md` / `TASKS_BACKLOG.md` / `docs/claude-plugin-marketplace-evaluation.md` は本T-007評価PRで更新。未追跡advisory docsは `.gitignore` 対象として原本非採用。 |
 | 未マージ/WIPブランチ | PR #4/#5 はmerge済み。local backup `backup/018-main-pre-align-20260629` は履歴保全用。 |
-| GitHub open issues / PRs | 2026/06/29 22:17 JST時点で open PR / issue は0件。PR #9 はmerge済み。 |
+| GitHub open issues / PRs | 2026/06/30 02:14 JST時点で、PR #10 はmerge済み。T-007評価を本更新で記録。 |
 
 ## タスク
 
@@ -35,7 +36,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-004 | README Non-Goals を改訂し配布を解禁 | ユーザー依頼（Non-Goals全面見直し） | 高 | S | done | GitHub Release作成・Claude Code/marketplace配布・パッケージ配布を「許可」へ。認証情報の保存/管理・rotate/reset助言の禁止は安全Non-Goalとして維持。 |
 | T-005 | Claude Code 対応（install手順追加） | ユーザー依頼（Codex/Claude Code両対応） | 高 | M | done | READMEに user/project 両方の install 手順を追加。frontmatterは現状で両対応互換のため変更不要。project配置のrepo同梱は配布物構成変更を避けるため行わない。 |
 | T-006 | 初の GitHub Release 発行 | 配布・普及フェーズ | 中 | S | todo | 推奨 `v0.2.0`。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。tag push / GitHub Release作成 / バージョン番号・target commit・実施時期の最終決定は未承認。 |
-| T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | todo | `.claude-plugin/plugin.json` + `skills/` 構成と `claude plugin validate` を評価。 |
+| T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | done | `docs/claude-plugin-marketplace-evaluation.md` で公式docsとローカルCLI helpを確認。`.claude-plugin/` 作成、`claude plugin tag`、marketplace add/install、GitHub Release は未実施。 |
 | T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | todo | パッケージ公開等の手段を調査のみ（実装は別途）。 |
 
 - 📌 2026-06-21 Claude Code 再レビュー: ローカル advisory docs は2026/06/29に再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。以後は本backlogとtracked docsを正とする。
@@ -47,3 +48,9 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - PR #9 release readiness brief、PR #7 advisory review disposition、PR #5 scanner hardening、PR #4 checkout v5 は `main` へmerge済み。local `main` は `origin/main` に同期済み。T-006 release readiness brief/notes draft は準備済みで、release/tag実行はowner承認待ち。
 - PR #4は最新 `origin/main` に一時mergeして、Windows PowerShell 5.1 / pwsh の readiness・scanner self-test・git-tracked scan と `git diff --check --cached` を確認済み。
 - ローカル advisory docs はPR #7で原本非採用・`.gitignore` 対象として記録済み。PR #4/#5で解消済みの指摘を再タスク化せず、残タスクはT-006/T-007/T-008へ集約。
+
+## 2026/06/30 Codex checkpoint
+
+- PR #10 のdocs同期後、T-007として Claude Code plugin marketplace 配布を評価。公式docsと `claude plugin` の非対話helpを確認した。
+- 評価結論は `docs/claude-plugin-marketplace-evaluation.md` に記録。現時点では `.claude-plugin/` を作らず、T-006 release/tag 承認後に別PRで配布構成を決める方針。
+- 残タスクは T-006 のowner承認待ち release/tag と、T-008 の配布チャネル調査。
