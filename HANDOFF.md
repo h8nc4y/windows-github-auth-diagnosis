@@ -76,7 +76,7 @@ git diff --check
 ## 次にやるべき候補
 
 1. この handoff/backlog 状態同期をPR化し、CI確認後にmergeする。
-2. 未追跡 `docs/CLAUDE_CODE_REVIEW_2026-06-21.md` と `docs/codex-task-scanner-hardening.md` を採用するか、別PR/破棄候補として整理する。
+2. ローカル advisory docs の原本は採用せず `.gitignore` で誤stage防止済み。採用済みの実装指摘は PR #5 scanner hardening と本 handoff/backlog 記録を正とする。
 3. T-006のRelease notesとtag案を用意する。Release/tag実行は version番号・公開タイミング・公開前チェックを確認してから行う。
 4. T-007/T-008としてClaude Codeプラグイン化と配布チャネルを調査する。
 
@@ -84,4 +84,4 @@ git diff --check
 
 - PR #5 (`fix/scanner-hardening-split`) と PR #4 (`chore/ci-checkout-v5`) は `main` へmerge済み。
 - local `main` は内容同一を確認後、`backup/018-main-pre-align-20260629` を作ってから `origin/main` へsoft align済み。
-- 未追跡 advisory docs は引き続き未採用。非git一時ディレクトリへコピーして `scan-private-markers.ps1 -Path <temp>` のworking-tree scanがpass済みだが、公開採否は別タスク。
+- ローカル advisory docs（`docs/CLAUDE_CODE_REVIEW_2026-06-21.md` / `docs/codex-task-scanner-hardening.md`）を再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。`.gitignore` で誤stageを防ぎ、残る公開作業はT-006/T-007/T-008に集約。
