@@ -9,6 +9,7 @@ The format follows Keep a Changelog conventions.
 ### Added
 
 - Claude Code install instructions for user-level and project-level skill paths.
+- Draft v0.2.0 release readiness brief and GitHub Release notes for owner approval before tagging.
 
 ### Changed
 

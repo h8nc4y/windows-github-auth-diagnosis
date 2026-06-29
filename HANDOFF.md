@@ -32,14 +32,14 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 
 ## 未完了 / 未実施
 
-- T-006: 初のGitHub Release / tag。Release notesとtag案の準備が次候補。tag pushとrelease作成は未実施で、version番号・公開タイミングは未確認。
+- T-006: 初のGitHub Release / tag。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` でRelease notes/tag案を準備済み。tag pushとrelease作成は未実施で、version番号・公開タイミング・最終target commitは未確認。
 - T-007: Claude Codeプラグイン化とmarketplace配布の評価。評価は自走可。配布物構成の新設や実公開は、現行停止条件と公開前チェックを確認してから実施する。
 - T-008: 配布チャネル拡張の調査。調査のみ自走可。
 
 ## 既知の問題・残懸念
 
 - T-003 の `actions/checkout@v5` 更新は PR #4 で完了。`windows-latest` は現在の pwsh+git 依存では pin せず維持する。
-- Release/tag は未実施。v0.2.0候補の確認、release notes、公開前チェックが残る。
+- Release/tag は未実施。v0.2.0候補の確認、`docs/release-v0.2.0-brief.md` の承認チェック、公開前チェックが残る。
 - public issue/PRに診断ログを書く場合は、token、credential-bearing log、ローカル絶対パス、private repo名を含めないこと。
 
 ## 最終検証結果
@@ -75,7 +75,7 @@ git diff --check
 
 ## 次にやるべき候補
 
-1. T-006のRelease notesとtag案を用意する。Release/tag実行は version番号・公開タイミング・公開前チェックを確認してから行う。
+1. T-006のRelease notes/tag案は `docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` に準備済み。次はownerがversion番号・target commit・公開タイミング・notes本文を承認する。
 2. T-007/T-008としてClaude Codeプラグイン化と配布チャネルを調査する。実公開や配布物構成の新設は公開前チェック後に扱う。
 
 ## 2026/06/29 Codex checkpoint
