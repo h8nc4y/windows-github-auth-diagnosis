@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/06/30 02:20 JST
+最終更新: 2026/06/30 02:33 JST
 
 ## リポジトリの目的
 
@@ -11,11 +11,11 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 - T-004（README Non-Goals改訂）とT-005（Claude Code install手順追加）は PR #3 で完了。
 - scanner hardening は PR #5 で完了。`main` へ merge `c6bafc7` 済み。
 - T-003（`actions/checkout@v5`への更新と`windows-latest`据え置きコメント）は PR #4 で完了。merge commit は `ff60b3e5829674342ca82bfb29e8fb285195387e`。
-- 2026/06/30 02:14 JST時点で、`main` は PR #10 merge `1c87f87` まで `origin/main` と同期済み。
+- 2026/06/30 02:30 JST時点で、本更新は PR #11 merge `477dcb2` 後の `main` をbaseに作成。
 - GitHub認証はkeyring-capable経路で確認済み。token値やcredential-bearing logは記録していない。
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 - T-006 release readiness brief / notes draft は PR #9 で `main` に反映済み。tag push / GitHub Release作成 / version番号・target commit・公開タイミング・notes本文の最終承認は未実施。
-- T-007 Claude Code plugin marketplace評価は `docs/claude-plugin-marketplace-evaluation.md` に記録済み。実 `.claude-plugin/` 作成、plugin tag、marketplace add/installは未実施。
+- T-007 Claude Code plugin marketplace評価は `docs/claude-plugin-marketplace-evaluation.md` に記録済み。T-008 distribution channel researchは `docs/distribution-channel-research.md` に記録済み。実 `.claude-plugin/` 作成、plugin tag、marketplace add/install、npm publishは未実施。
 
 ## 完了タスクとcommit
 
@@ -34,12 +34,13 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | T-006 release readiness brief / notes draft | PR #9 merge `4ed8da3` |
 | PR #10 post-release state sync | PR #10 merge `1c87f87` |
 | T-007 Claude Code plugin marketplace評価 | `docs/claude-plugin-marketplace-evaluation.md` |
+| T-008 配布チャネル調査 | `docs/distribution-channel-research.md` |
 
 ## 未完了 / 未実施
 
 - T-006: 初のGitHub Release / tag。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` は PR #9 で `main` に反映済み。tag pushとrelease作成は未実施で、version番号・公開タイミング・最終target commitは未確認。
 - T-007: Claude Codeプラグイン化とmarketplace配布の評価は `docs/claude-plugin-marketplace-evaluation.md` で完了。配布物構成の新設、tag、marketplace add/install、実公開は未実施。
-- T-008: 配布チャネル拡張の調査。調査のみ自走可。
+- T-008: 配布チャネル拡張の調査は `docs/distribution-channel-research.md` で完了。実publish、package metadata作成、外部配布smokeは未実施。
 
 ## 既知の問題・残懸念
 
@@ -72,6 +73,20 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
 | `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
 | `git diff --check --cached` | pass |
+| `gitleaks git --staged --redact` | pass |
+
+2026/06/30 02:33 JST、T-008調査branchで追加実行:
+
+| コマンド | 結果 |
+| --- | --- |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1` | pass |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
+| `git diff --check --cached` | pass |
+| `gitleaks git --staged --redact` | pass |
 
 ## セットアップ・検証コマンド
 
@@ -86,14 +101,14 @@ git diff --check
 
 ## ブランチ状況
 
-- `main`: PR #10 merge `1c87f87` まで `origin/main` と同期済み。
+- base `main`: PR #11 merge `477dcb2` まで `origin/main` と同期済みの状態から本T-008 branchを作成。
 - local backup branch: `backup/018-main-pre-align-20260629`（PR #4/#5統合前の同一tree履歴を保存）
-- open PR / issue: 2026/06/30 02:14 JST時点ではPR #10 merge後の状態を確認済み。T-007評価は本更新で記録。
+- open PR / issue: 2026/06/30 02:30 JST時点ではPR #11 merge後の状態を確認済み。T-008調査は本更新で記録。
 
 ## 次にやるべき候補
 
 1. T-006のRelease notes/tag案は `docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` に PR #9 で準備済み。次はownerがversion番号・target commit・公開タイミング・notes本文を承認する。
-2. T-008として配布チャネルを調査する。実公開や配布物構成の新設は公開前チェック後に扱う。
+2. T-006承認後、必要なら `.claude-plugin/` 実装PRへ進む。実公開や配布物構成の新設は公開前チェック後に扱う。
 
 ## 2026/06/29 Codex checkpoint
 
@@ -106,3 +121,4 @@ git diff --check
 - PR #10 merge `1c87f87` 後の `main` から `docs/t007-plugin-evaluation` を作成。
 - Claude Code plugin docs と `claude plugin` 非対話helpを確認し、T-007評価を `docs/claude-plugin-marketplace-evaluation.md` に記録。
 - `.claude-plugin/`、`claude plugin tag`、marketplace add/install、GitHub Release/tag push は実施していない。
+- T-008配布チャネル調査を `docs/distribution-channel-research.md` に追加。推奨順序は GitHub Release -> Release後README調整 -> Claude plugin marketplace実装PR、npm packageは現時点で非推奨。
