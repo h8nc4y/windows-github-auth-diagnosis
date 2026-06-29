@@ -98,6 +98,15 @@ Follow the procedure in [SKILL.md](SKILL.md): confirm remote wiring, check crede
 
 The examples use placeholders only. Do not replace them with secret values, raw auth logs, or customer data in public issues.
 
+## Distribution Planning
+
+- [Release v0.2.0 brief](docs/release-v0.2.0-brief.md)
+- [Release v0.2.0 notes draft](docs/release-v0.2.0-notes-draft.md)
+- [Claude Code plugin marketplace evaluation](docs/claude-plugin-marketplace-evaluation.md)
+- [Distribution channel research](docs/distribution-channel-research.md)
+
+Do not publish releases, packages, plugin marketplaces, or external smoke tests until the version, target commit, public text, and channel-specific safety gates are confirmed.
+
 ## Safety Notes
 
 - Never print token values.
