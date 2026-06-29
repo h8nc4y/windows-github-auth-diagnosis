@@ -33,7 +33,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-003 | GitHub Actions の非推奨対応（Node.js 20 / windows-latest） | 最新Validate runのannotation | 高 | S | done | PR #4でmerge済み: `actions/checkout@v4`→`@v5`（Node24）。`windows-latest` は pwsh+git のみ依存のためpinせず据え置き、理由をworkflowに明記。 |
 | T-004 | README Non-Goals を改訂し配布を解禁 | ユーザー依頼（Non-Goals全面見直し） | 高 | S | done | GitHub Release作成・Claude Code/marketplace配布・パッケージ配布を「許可」へ。認証情報の保存/管理・rotate/reset助言の禁止は安全Non-Goalとして維持。 |
 | T-005 | Claude Code 対応（install手順追加） | ユーザー依頼（Codex/Claude Code両対応） | 高 | M | done | READMEに user/project 両方の install 手順を追加。frontmatterは現状で両対応互換のため変更不要。project配置のrepo同梱は配布物構成変更を避けるため行わない。 |
-| T-006 | 初の GitHub Release 発行 | 配布・普及フェーズ | 中 | S | todo | 推奨 `v0.2.0`。tag・release notes・README badge整備。T-003は完了済み。バージョン番号・実施時期・公開前チェックは要確認。 |
+| T-006 | 初の GitHub Release 発行 | 配布・普及フェーズ | 中 | S | todo | 推奨 `v0.2.0`。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` でtag/release notes案を準備済み。tag push / GitHub Release作成 / バージョン番号・target commit・実施時期の最終決定は未承認。 |
 | T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | todo | `.claude-plugin/plugin.json` + `skills/` 構成と `claude plugin validate` を評価。 |
 | T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | todo | パッケージ公開等の手段を調査のみ（実装は別途）。 |
 
@@ -43,6 +43,6 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 
 ## 2026/06/29 Codex checkpoint
 
-- PR #7 advisory review disposition、PR #5 scanner hardening、PR #4 checkout v5 は `main` へmerge済み。local `main` は `origin/main` に同期済み。
+- PR #7 advisory review disposition、PR #5 scanner hardening、PR #4 checkout v5 は `main` へmerge済み。local `main` は `origin/main` に同期済み。T-006 release readiness brief/notes draft はPR化対象として準備中。
 - PR #4は最新 `origin/main` に一時mergeして、Windows PowerShell 5.1 / pwsh の readiness・scanner self-test・git-tracked scan と `git diff --check --cached` を確認済み。
 - ローカル advisory docs はPR #7で原本非採用・`.gitignore` 対象として記録済み。PR #4/#5で解消済みの指摘を再タスク化せず、残タスクはT-006/T-007/T-008へ集約。
