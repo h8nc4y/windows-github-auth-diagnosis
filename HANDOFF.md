@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/06/29 09:43 JST
+最終更新: 2026/06/29 16:16 JST
 
 ## リポジトリの目的
 
@@ -11,7 +11,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 - T-004（README Non-Goals改訂）とT-005（Claude Code install手順追加）は PR #3 で完了。
 - scanner hardening は PR #5 で完了。`main` へ merge `c6bafc7` 済み。
 - T-003（`actions/checkout@v5`への更新と`windows-latest`据え置きコメント）は PR #4 で完了。merge commit は `ff60b3e5829674342ca82bfb29e8fb285195387e`。
-- 2026/06/29 09:43 JST時点で open PR は0件。`main` は `origin/main` と同期済み。
+- 2026/06/29 16:13 JST時点で open PR / issue は0件。`main` は PR #7 merge `8b3897f` まで `origin/main` と同期済み。
 - GitHub認証はkeyring-capable経路で確認済み。token値やcredential-bearing logは記録していない。
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 
@@ -28,6 +28,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | T-004/T-005 docs整備 | PR #3 merge `48c26e9` |
 | scanner hardening | PR #5 merge `c6bafc7` |
 | T-003 CI checkout v5 | PR #4 merge `ff60b3e` |
+| advisory review disposition | PR #7 merge `8b3897f` |
 
 ## 未完了 / 未実施
 
@@ -43,7 +44,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 
 ## 最終検証結果
 
-2026/06/29 09:38 JST、PR #4 を最新 `origin/main` へ一時mergeした状態で実行:
+2026/06/29 16:16 JST、PR #7 merge後の `main` から本docs同期branchを切った状態で実行:
 
 | コマンド | 結果 |
 | --- | --- |
@@ -68,20 +69,17 @@ git diff --check
 
 ## ブランチ状況
 
-- current branch: `docs/018-closeout-state`
-- upstream main: `origin/main` at PR #4 merge `ff60b3e`
+- `main`: PR #7 merge `8b3897f` まで `origin/main` と同期済み。
 - local backup branch: `backup/018-main-pre-align-20260629`（PR #4/#5統合前の同一tree履歴を保存）
-- open PR: 2026/06/29 09:43 JST時点でなし
+- open PR / issue: 2026/06/29 16:13 JST時点でなし
 
 ## 次にやるべき候補
 
-1. この handoff/backlog 状態同期をPR化し、CI確認後にmergeする。
-2. ローカル advisory docs の原本は採用せず `.gitignore` で誤stage防止済み。採用済みの実装指摘は PR #5 scanner hardening と本 handoff/backlog 記録を正とする。
-3. T-006のRelease notesとtag案を用意する。Release/tag実行は version番号・公開タイミング・公開前チェックを確認してから行う。
-4. T-007/T-008としてClaude Codeプラグイン化と配布チャネルを調査する。
+1. T-006のRelease notesとtag案を用意する。Release/tag実行は version番号・公開タイミング・公開前チェックを確認してから行う。
+2. T-007/T-008としてClaude Codeプラグイン化と配布チャネルを調査する。実公開や配布物構成の新設は公開前チェック後に扱う。
 
 ## 2026/06/29 Codex checkpoint
 
 - PR #5 (`fix/scanner-hardening-split`) と PR #4 (`chore/ci-checkout-v5`) は `main` へmerge済み。
 - local `main` は内容同一を確認後、`backup/018-main-pre-align-20260629` を作ってから `origin/main` へsoft align済み。
-- ローカル advisory docs（`docs/CLAUDE_CODE_REVIEW_2026-06-21.md` / `docs/codex-task-scanner-hardening.md`）を再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。`.gitignore` で誤stageを防ぎ、残る公開作業はT-006/T-007/T-008に集約。
+- ローカル advisory docs（`docs/CLAUDE_CODE_REVIEW_2026-06-21.md` / `docs/codex-task-scanner-hardening.md`）を再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない判断をPR #7で記録済み。`.gitignore` で誤stageを防ぎ、残る公開作業はT-006/T-007/T-008に集約。

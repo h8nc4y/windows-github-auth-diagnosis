@@ -4,6 +4,7 @@
 更新: 2026/06/13 12:43:19 +09:00（Claude Code: 配布・普及フェーズへ移行）
 更新: 2026/06/20 23:04:00 +09:00（Codex: docs PRをゲート変更から分離し、T-004/T-005を完了）
 更新: 2026/06/29 09:43 JST（Codex: PR #4/#5 merge後の状態へ同期）
+更新: 2026/06/29 16:16 JST（Codex: PR #7 advisory disposition後の状態へ同期）
 
 ## Goal
 
@@ -14,14 +15,14 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | 情報源 | 結果 |
 | --- | --- |
 | `TASKS_BACKLOG.md` / `TODO.md` / `TASKS.md` | このファイルを正として維持。`TODO.md` / `TASKS.md` は該当なし。 |
-| `HANDOFF.md` | CodexからClaude Codeへの引き継ぎ用に作成済み。2026/06/29にPR #4/#5 merge後の状態へ更新。 |
+| `HANDOFF.md` | CodexからClaude Codeへの引き継ぎ用に作成済み。2026/06/29にPR #7 advisory disposition後の状態へ更新。 |
 | `README.md` / `docs/` | `README.md` は検証手順を定義。未追跡advisory docsは別タスク扱い。 |
 | `AGENTS.md` / `.codex/` | ユーザー提示の `AGENTS.md` 指示を適用。リポジトリ内 `.codex/` は該当なし。 |
 | コード内 `TODO` / `FIXME` | 該当なし。 |
-| 失敗テスト / lint / 型チェック | 該当なし。2026/06/29 09:38 JST時点でPR #4を最新baseへ一時mergeし、Windows PowerShell 5.1 / pwsh の3本検証と `git diff --check --cached` は通過。 |
-| `git status` 未コミット変更 | `HANDOFF.md` / `TASKS_BACKLOG.md` は本状態同期で更新。未追跡advisory docsは別タスク扱い。 |
+| 失敗テスト / lint / 型チェック | 該当なし。2026/06/29 16:16 JST時点でWindows PowerShell 5.1 / pwsh の3本検証と `git diff --check` は通過。 |
+| `git status` 未コミット変更 | `HANDOFF.md` / `TASKS_BACKLOG.md` は本PR #7後状態同期で更新。未追跡advisory docsは `.gitignore` 対象として原本非採用。 |
 | 未マージ/WIPブランチ | PR #4/#5 はmerge済み。local backup `backup/018-main-pre-align-20260629` は履歴保全用。 |
-| GitHub open issues / PRs | 2026/06/29 09:43 JST時点で open PR は0件。PR #4/#5 はmerge済み。 |
+| GitHub open issues / PRs | 2026/06/29 16:13 JST時点で open PR / issue は0件。PR #7 はmerge済み。 |
 
 ## タスク
 
@@ -42,6 +43,6 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 
 ## 2026/06/29 Codex checkpoint
 
-- PR #5 scanner hardening と PR #4 checkout v5 は `main` へmerge済み。local `main` は `origin/main` に同期済み。
+- PR #7 advisory review disposition、PR #5 scanner hardening、PR #4 checkout v5 は `main` へmerge済み。local `main` は `origin/main` に同期済み。
 - PR #4は最新 `origin/main` に一時mergeして、Windows PowerShell 5.1 / pwsh の readiness・scanner self-test・git-tracked scan と `git diff --check --cached` を確認済み。
-- ローカル advisory docs は原本非採用・`.gitignore` 対象。PR #4/#5で解消済みの指摘を再タスク化せず、残タスクはT-006/T-007/T-008へ集約。
+- ローカル advisory docs はPR #7で原本非採用・`.gitignore` 対象として記録済み。PR #4/#5で解消済みの指摘を再タスク化せず、残タスクはT-006/T-007/T-008へ集約。
