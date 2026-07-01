@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/06/30 02:33 JST
+最終更新: 2026/07/01 12:22 JST
 
 ## リポジトリの目的
 
@@ -11,7 +11,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 - T-004（README Non-Goals改訂）とT-005（Claude Code install手順追加）は PR #3 で完了。
 - scanner hardening は PR #5 で完了。`main` へ merge `c6bafc7` 済み。
 - T-003（`actions/checkout@v5`への更新と`windows-latest`据え置きコメント）は PR #4 で完了。merge commit は `ff60b3e5829674342ca82bfb29e8fb285195387e`。
-- 2026/06/30 02:30 JST時点で、本更新は PR #11 merge `477dcb2` 後の `main` をbaseに作成。
+- 2026/07/01 12:20 JST時点で、`main` は PR #12 merge `ef17dbf` まで `origin/main` と同期済み。GitHub open issue / open PR は 0件。
 - GitHub認証はkeyring-capable経路で確認済み。token値やcredential-bearing logは記録していない。
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 - T-006 release readiness brief / notes draft は PR #9 で `main` に反映済み。tag push / GitHub Release作成 / version番号・target commit・公開タイミング・notes本文の最終承認は未実施。
@@ -34,13 +34,13 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | T-006 release readiness brief / notes draft | PR #9 merge `4ed8da3` |
 | PR #10 post-release state sync | PR #10 merge `1c87f87` |
 | T-007 Claude Code plugin marketplace評価 | `docs/claude-plugin-marketplace-evaluation.md` |
-| T-008 配布チャネル調査 | `docs/distribution-channel-research.md` |
+| T-008 配布チャネル調査 | PR #12 merge `ef17dbf`; `docs/distribution-channel-research.md` |
 
 ## 未完了 / 未実施
 
 - T-006: 初のGitHub Release / tag。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` は PR #9 で `main` に反映済み。tag pushとrelease作成は未実施で、version番号・公開タイミング・最終target commitは未確認。
 - T-007: Claude Codeプラグイン化とmarketplace配布の評価は `docs/claude-plugin-marketplace-evaluation.md` で完了。配布物構成の新設、tag、marketplace add/install、実公開は未実施。
-- T-008: 配布チャネル拡張の調査は `docs/distribution-channel-research.md` で完了。実publish、package metadata作成、外部配布smokeは未実施。
+- T-008: 配布チャネル拡張の調査は PR #12 merge `ef17dbf` で `docs/distribution-channel-research.md` に反映済み。実publish、package metadata作成、外部配布smokeは未実施。
 
 ## 既知の問題・残懸念
 
@@ -88,6 +88,17 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 | `git diff --check --cached` | pass |
 | `gitleaks git --staged --redact` | pass |
 
+
+2026/07/01 12:25 JST、本current-state sync branchで追加実行:
+
+| コマンド | 結果 |
+| --- | --- |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1` | pass |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-oss-readiness.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-scan-private-markers.ps1` | pass |
+| `pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\scan-private-markers.ps1` | pass |
 ## セットアップ・検証コマンド
 
 ```powershell
@@ -101,9 +112,9 @@ git diff --check
 
 ## ブランチ状況
 
-- base `main`: PR #11 merge `477dcb2` まで `origin/main` と同期済みの状態から本T-008 branchを作成。
+- base `main`: PR #12 merge `ef17dbf` まで `origin/main` と同期済みの状態から本current-state sync branchを作成。
 - local backup branch: `backup/018-main-pre-align-20260629`（PR #4/#5統合前の同一tree履歴を保存）
-- open PR / issue: 2026/06/30 02:30 JST時点ではPR #11 merge後の状態を確認済み。T-008調査は本更新で記録。
+- open PR / issue: 2026/07/01 12:20 JST時点でどちらも0件。T-008調査は PR #12 でmerge済み。
 
 ## 次にやるべき候補
 
@@ -121,4 +132,9 @@ git diff --check
 - PR #10 merge `1c87f87` 後の `main` から `docs/t007-plugin-evaluation` を作成。
 - Claude Code plugin docs と `claude plugin` 非対話helpを確認し、T-007評価を `docs/claude-plugin-marketplace-evaluation.md` に記録。
 - `.claude-plugin/`、`claude plugin tag`、marketplace add/install、GitHub Release/tag push は実施していない。
-- T-008配布チャネル調査を `docs/distribution-channel-research.md` に追加。推奨順序は GitHub Release -> Release後README調整 -> Claude plugin marketplace実装PR、npm packageは現時点で非推奨。
+- T-008配布チャネル調査は PR #12 merge `ef17dbf` で `docs/distribution-channel-research.md` に反映済み。推奨順序は GitHub Release -> Release後README調整 -> Claude plugin marketplace実装PR、npm packageは現時点で非推奨。
+
+## 2026/07/01 Codex checkpoint
+
+- PR #12 merge `ef17dbf` 後の `main...origin/main` clean を確認し、GitHub open issue / open PR が0件であることを確認。
+- 残タスクはT-006のowner承認待ち release/tag と、承認後のREADME tag導線・Claude plugin marketplace構成PR。tag push、GitHub Release、plugin marketplace add/install、npm publishは未実施。
