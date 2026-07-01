@@ -8,6 +8,7 @@
 更新: 2026/06/29 22:19 JST（Codex: PR #9 release readiness brief後の状態へ同期）
 更新: 2026/06/30 02:14 JST（Codex: T-007 Claude Code plugin marketplace評価をdocs化）
 更新: 2026/06/30 02:30 JST（Codex: T-008 配布チャネル調査をdocs化）
+更新: 2026/07/01 12:22 JST（Codex: PR #12後のcurrent-stateを同期）
 
 ## Goal
 
@@ -18,14 +19,14 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | 情報源 | 結果 |
 | --- | --- |
 | `TASKS_BACKLOG.md` / `TODO.md` / `TASKS.md` | このファイルを正として維持。`TODO.md` / `TASKS.md` は該当なし。 |
-| `HANDOFF.md` | CodexからClaude Codeへの引き継ぎ用に作成済み。2026/06/30にT-008 distribution channel research後の状態へ更新。 |
+| `HANDOFF.md` | CodexからClaude Codeへの引き継ぎ用に作成済み。2026/07/01にPR #12後のcurrent-stateへ更新。 |
 | `README.md` / `docs/` | `README.md` は検証手順と配布計画docsへの導線を定義。`docs/release-v0.2.0-brief.md` / `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。`docs/claude-plugin-marketplace-evaluation.md` でT-007、`docs/distribution-channel-research.md` でT-008を記録。未追跡advisory docsは別タスク扱い。 |
 | `AGENTS.md` / `.codex/` | ユーザー提示の `AGENTS.md` 指示を適用。リポジトリ内 `.codex/` は該当なし。 |
 | コード内 `TODO` / `FIXME` | 該当なし。 |
-| 失敗テスト / lint / 型チェック | 該当なし。2026/06/30 02:33 JST時点で `powershell` / `pwsh` の readiness・scanner self-test・git-tracked scan、`git diff --check --cached`、`gitleaks git --staged --redact` は通過。 |
-| `git status` 未コミット変更 | `README.md` / `HANDOFF.md` / `TASKS_BACKLOG.md` / `docs/distribution-channel-research.md` は本T-008調査PRで更新。未追跡advisory docsは `.gitignore` 対象として原本非採用。 |
+| 失敗テスト / lint / 型チェック | 該当なし。2026/06/30 02:33 JST時点で `powershell` / `pwsh` の readiness・scanner self-test・git-tracked scan、`git diff --check --cached`、`gitleaks git --staged --redact` は通過。2026/07/01の本current-state syncでは `powershell` / `pwsh` の readiness・scanner self-test・git-tracked scan を再実行し通過。 |
+| `git status` 未コミット変更 | 作業開始時点の `main...origin/main` はclean。本current-state syncでは `HANDOFF.md` / `TASKS_BACKLOG.md` のみ更新。未追跡advisory docsは `.gitignore` 対象として原本非採用。 |
 | 未マージ/WIPブランチ | PR #4/#5 はmerge済み。local backup `backup/018-main-pre-align-20260629` は履歴保全用。 |
-| GitHub open issues / PRs | 2026/06/30 02:30 JST時点で、PR #11 はmerge済み。T-008調査を本更新で記録。 |
+| GitHub open issues / PRs | 2026/07/01 12:20 JST時点で open issue / open PR は0件。PR #12 `docs/t008-distribution-channel-research` は merge commit `ef17dbf` で反映済み。 |
 
 ## タスク
 
@@ -38,7 +39,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-005 | Claude Code 対応（install手順追加） | ユーザー依頼（Codex/Claude Code両対応） | 高 | M | done | READMEに user/project 両方の install 手順を追加。frontmatterは現状で両対応互換のため変更不要。project配置のrepo同梱は配布物構成変更を避けるため行わない。 |
 | T-006 | 初の GitHub Release 発行 | 配布・普及フェーズ | 中 | S | todo | 推奨 `v0.2.0`。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。tag push / GitHub Release作成 / バージョン番号・target commit・実施時期の最終決定は未承認。 |
 | T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | done | `docs/claude-plugin-marketplace-evaluation.md` で公式docsとローカルCLI helpを確認。`.claude-plugin/` 作成、`claude plugin tag`、marketplace add/install、GitHub Release は未実施。 |
-| T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | done | `docs/distribution-channel-research.md` でGitHub Release、manual install、Claude plugin marketplace、npm package等を比較。実publish / install smoke / package metadata作成は未実施。 |
+| T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | done | PR #12 merge `ef17dbf`。`docs/distribution-channel-research.md` でGitHub Release、manual install、Claude plugin marketplace、npm package等を比較。実publish / install smoke / package metadata作成は未実施。 |
 
 - 📌 2026-06-21 Claude Code 再レビュー: ローカル advisory docs は2026/06/29に再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。以後は本backlogとtracked docsを正とする。
 
@@ -55,4 +56,9 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - PR #10 のdocs同期後、T-007として Claude Code plugin marketplace 配布を評価。公式docsと `claude plugin` の非対話helpを確認した。
 - 評価結論は `docs/claude-plugin-marketplace-evaluation.md` に記録。現時点では `.claude-plugin/` を作らず、T-006 release/tag 承認後に別PRで配布構成を決める方針。
 - 残タスクは T-006 のowner承認待ち release/tag と、T-008 の配布チャネル調査。
-- T-008は `docs/distribution-channel-research.md` で調査完了。推奨順序は GitHub Release を正本にし、Release承認後にClaude plugin marketplace構成を別PRで追加、npm packageは現時点で非推奨。
+- T-008は PR #12 merge `ef17dbf` で `docs/distribution-channel-research.md` に反映済み。推奨順序は GitHub Release を正本にし、Release承認後にClaude plugin marketplace構成を別PRで追加、npm packageは現時点で非推奨。
+
+## 2026/07/01 Codex checkpoint
+
+- PR #12 merge `ef17dbf` 後の `main...origin/main` clean と、GitHub open issue / open PR 0件を確認。
+- 残タスクはT-006 owner承認待ちのGitHub Release/tag。承認前のtag push、GitHub Release作成、Claude plugin marketplace add/install、npm publish、外部配布smokeは未実施。
