@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/07/01 12:22 JST
+最終更新: 2026/07/03 JST（Claude Fable5）
 
 ## リポジトリの目的
 
@@ -16,6 +16,7 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 - secret/token/OAuth値、実データ、ローカル絶対パスは引き継ぎ文書に記録していない。
 - T-006 release readiness brief / notes draft は PR #9 で `main` に反映済み。tag push / GitHub Release作成 / version番号・target commit・公開タイミング・notes本文の最終承認は未実施。
 - T-007 Claude Code plugin marketplace評価は `docs/claude-plugin-marketplace-evaluation.md` に記録済み。T-008 distribution channel researchは `docs/distribution-channel-research.md` に記録済み。実 `.claude-plugin/` 作成、plugin tag、marketplace add/install、npm publishは未実施。
+- 2026/07/03 Claude Fable5: 要件再評価を `docs/requirements-reassessment-2026-07.md`（PR #14 merge `c6d968a`）に記録。T-009 skills.sh評価は `docs/skills-sh-channel-evaluation.md` で完了。T-010（上流issueへの紹介コメント）はowner承認ゲートとしてblocked。repo description/topicsを検索導線強化のため更新済み（可逆・非ゲート）。2026-07-03の再調査で `.claude-plugin/plugin.json` 必須フィールドは `name` のみ、root直下SKILL.md単体構成のままplugin成立を確認。
 
 ## 完了タスクとcommit
 
@@ -118,8 +119,9 @@ git diff --check
 
 ## 次にやるべき候補
 
-1. T-006のRelease notes/tag案は `docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` に PR #9 で準備済み。次はownerがversion番号・target commit・公開タイミング・notes本文を承認する。
-2. T-006承認後、必要なら `.claude-plugin/` 実装PRへ進む。実公開や配布物構成の新設は公開前チェック後に扱う。
+1. T-006のRelease notes/tag案は `docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` に PR #9 で準備済み。次はownerがversion番号・target commit・公開タイミング・notes本文を承認する。owner向け質問リストは `docs/requirements-reassessment-2026-07.md` §6。
+2. T-006承認後、`.claude-plugin/plugin.json` 実装PR（`claude plugin validate --strict` をCI/local検証へ追加）と、READMEへの `npx skills add` 導線追加PRへ進む。実公開や配布物構成の新設は公開前チェック後に扱う。
+3. T-010（上流issueへの紹介コメント）はowner承認があるまで着手しない。
 
 ## 2026/06/29 Codex checkpoint
 
