@@ -41,7 +41,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-006 | 初の GitHub Release 発行 | 配布・普及フェーズ | 中 | S | todo | 推奨 `v0.2.0`。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。tag push / GitHub Release作成 / バージョン番号・target commit・実施時期の最終決定は未承認。 |
 | T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | done | `docs/claude-plugin-marketplace-evaluation.md` で公式docsとローカルCLI helpを確認。`.claude-plugin/` 作成、`claude plugin tag`、marketplace add/install、GitHub Release は未実施。 |
 | T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | done | PR #12 merge `ef17dbf`。`docs/distribution-channel-research.md` でGitHub Release、manual install、Claude plugin marketplace、npm package等を比較。実publish / install smoke / package metadata作成は未実施。 |
-| T-009 | skills.sh（`npx skills add`）掲載の評価 | 要件再評価 2026-07 | 低 | S | todo | `docs/requirements-reassessment-2026-07.md` §5。SKILL.md互換で変換コストゼロ見込み。掲載手順・登録要否・撤回可否を調査してから判断。実掲載は未実施。 |
+| T-009 | skills.sh（`npx skills add`）掲載の評価 | 要件再評価 2026-07 | 低 | S | done | `docs/skills-sh-channel-evaluation.md`。submit不要・root直下SKILL.mdのまま機能する見込み。残る判断はRelease後のREADME導線追加のみ（別PR）。install smoke・バッジ追加は未実施。 |
 | T-010 | 上流issueへのskill紹介コメント投稿 | 要件再評価 2026-07 | 低 | S | blocked | owner承認ゲート（外部発信）。対象候補は openai/codex #21821 / #17459 等。承認前は投稿しない。 |
 
 - 📌 2026-06-21 Claude Code 再レビュー: ローカル advisory docs は2026/06/29に再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。以後は本backlogとtracked docsを正とする。
@@ -73,3 +73,4 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - SKILL.md改善候補（release blockerではない）: 一時的失敗の分類前リトライ明文化、環境変数由来tokenが有効な場合の判定注記。
 - ローカルのagent-orchestration handoff drafts（`docs/CLAUDECODE_FABLE5_*.md`）はPR #7の前例に従い `.gitignore` 対象として原本非採用。
 - 残ゲートはT-006（owner 4点承認: version / target commit / 公開タイミング / notes本文）。承認前のtag push / Release作成 / marketplace add/install / npm publish / 外部発信は未実施。
+- 同日追記: PR #14 merge `c6d968a` 後、repo description/topics を Codex/Claude Code 両対応の文言と検索導線topics（claude-code / agent-skills / github-cli / sandbox / credential-manager 追加）へ更新（可逆・非ゲート）。T-009 は `docs/skills-sh-channel-evaluation.md` で評価完了。submit不要・現構成のまま `npx skills add` が機能する見込みのため、残る判断はRelease後のREADME導線追加のみ。
