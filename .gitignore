@@ -9,3 +9,6 @@ tmp/
 # Local advisory review drafts kept out of public artifacts.
 docs/CLAUDE_CODE_REVIEW_2026-06-21.md
 docs/codex-task-scanner-hardening.md
+# Local agent-orchestration handoff drafts kept out of public artifacts.
+docs/CLAUDECODE_FABLE5_HANDOFF.md
+docs/CLAUDECODE_FABLE5_PROMPT.md

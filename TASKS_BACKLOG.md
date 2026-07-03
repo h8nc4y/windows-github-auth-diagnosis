@@ -9,6 +9,7 @@
 更新: 2026/06/30 02:14 JST（Codex: T-007 Claude Code plugin marketplace評価をdocs化）
 更新: 2026/06/30 02:30 JST（Codex: T-008 配布チャネル調査をdocs化）
 更新: 2026/07/01 12:22 JST（Codex: PR #12後のcurrent-stateを同期）
+更新: 2026/07/03 JST（Claude Fable5: 要件再評価をdocs化、T-009/T-010を追加）
 
 ## Goal
 
@@ -40,6 +41,8 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-006 | 初の GitHub Release 発行 | 配布・普及フェーズ | 中 | S | todo | 推奨 `v0.2.0`。`docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` はPR #9で準備済み。tag push / GitHub Release作成 / バージョン番号・target commit・実施時期の最終決定は未承認。 |
 | T-007 | Claude Code プラグイン化＋marketplace配布の評価 | 次フェーズ | 中 | M | done | `docs/claude-plugin-marketplace-evaluation.md` で公式docsとローカルCLI helpを確認。`.claude-plugin/` 作成、`claude plugin tag`、marketplace add/install、GitHub Release は未実施。 |
 | T-008 | 配布チャネル拡張の調査 | 次フェーズ | 低 | S | done | PR #12 merge `ef17dbf`。`docs/distribution-channel-research.md` でGitHub Release、manual install、Claude plugin marketplace、npm package等を比較。実publish / install smoke / package metadata作成は未実施。 |
+| T-009 | skills.sh（`npx skills add`）掲載の評価 | 要件再評価 2026-07 | 低 | S | todo | `docs/requirements-reassessment-2026-07.md` §5。SKILL.md互換で変換コストゼロ見込み。掲載手順・登録要否・撤回可否を調査してから判断。実掲載は未実施。 |
+| T-010 | 上流issueへのskill紹介コメント投稿 | 要件再評価 2026-07 | 低 | S | blocked | owner承認ゲート（外部発信）。対象候補は openai/codex #21821 / #17459 等。承認前は投稿しない。 |
 
 - 📌 2026-06-21 Claude Code 再レビュー: ローカル advisory docs は2026/06/29に再確認。T-003はPR #4、scanner hardeningはPR #5で解消済みのため原本は追跡しない。以後は本backlogとtracked docsを正とする。
 
@@ -62,3 +65,11 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 
 - PR #12 merge `ef17dbf` 後の `main...origin/main` clean と、GitHub open issue / open PR 0件を確認。
 - 残タスクはT-006 owner承認待ちのGitHub Release/tag。承認前のtag push、GitHub Release作成、Claude plugin marketplace add/install、npm publish、外部配布smokeは未実施。
+
+## 2026/07/03 Claude Fable5 checkpoint
+
+- Fable5が引き継ぎ、配布価値・ユーザー導線・誤診リスクを再評価して `docs/requirements-reassessment-2026-07.md` に記録。価値仮説は維持（需要issueは上流repoに複数Open、競合skill不在）。
+- Web調査差分: `.claude-plugin/plugin.json` の必須フィールドは `name` のみで、SKILL.md root直下の単一skill構成のままpluginとして成立する。skills.sh（`npx skills add`）が新配布チャネルとして確認されたためT-009を追加。上流issueへの紹介コメントはT-010としてowner承認ゲートに置いた。
+- SKILL.md改善候補（release blockerではない）: 一時的失敗の分類前リトライ明文化、環境変数由来tokenが有効な場合の判定注記。
+- ローカルのagent-orchestration handoff drafts（`docs/CLAUDECODE_FABLE5_*.md`）はPR #7の前例に従い `.gitignore` 対象として原本非採用。
+- 残ゲートはT-006（owner 4点承認: version / target commit / 公開タイミング / notes本文）。承認前のtag push / Release作成 / marketplace add/install / npm publish / 外部発信は未実施。
