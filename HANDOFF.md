@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/07/03 JST（Claude Fable5）
+最終更新: 2026/07/11 JST（Claude Fable5 → Codex 引き継ぎ）
 
 ## リポジトリの目的
 
@@ -17,6 +17,9 @@ Windows上のCodex/agent sandboxがWindows keyringを読めず、GitHub認証が
 - T-006 release readiness brief / notes draft は PR #9 で `main` に反映済み。tag push / GitHub Release作成 / version番号・target commit・公開タイミング・notes本文の最終承認は未実施。
 - T-007 Claude Code plugin marketplace評価は `docs/claude-plugin-marketplace-evaluation.md` に記録済み。T-008 distribution channel researchは `docs/distribution-channel-research.md` に記録済み。実 `.claude-plugin/` 作成、plugin tag、marketplace add/install、npm publishは未実施。
 - 2026/07/03 Claude Fable5: 要件再評価を `docs/requirements-reassessment-2026-07.md`（PR #14 merge `c6d968a`）に記録。T-009 skills.sh評価は `docs/skills-sh-channel-evaluation.md` で完了。T-010（上流issueへの紹介コメント）はowner承認ゲートとしてblocked。repo description/topicsを検索導線強化のため更新済み（可逆・非ゲート）。2026-07-03の再調査で `.claude-plugin/plugin.json` 必須フィールドは `name` のみ、root直下SKILL.md単体構成のままplugin成立を確認。
+- 2026/07/06: PR #16（Projects rootのノート取り込み）、PR #17（post-Fable5 引き継ぎ文書 `docs/CLAUDECODE_HANDOFF.md`）merge済み。
+- 2026/07/11 Claude Fable5: 要件再評価§3の改善候補2点（一時的失敗の分類前1回再試行、環境変数由来token sourceの健全判定注記）をSKILL.md/CHANGELOG/release notes draftへ実装し、PR #18 として作成。CI Validate pass。セルフ承認マージは実行環境の分類器に拒否されたため、**PR #18 はレビュー後マージ待ちのopen状態**で引き継ぐ。
+- 2026/07/11 Claude Fable5: Codex GPT-5.5へのセカンドオピニオン依頼（2026-07-03、Q1〜Q5）は、エージェント間メッセージング（agmsg）のスクリプト実体が廃止済みで受信不能と確認。返信待ちはクローズし、以後のセカンドオピニオンは実装担当（Codex）が本repoのdocs上で直接見解を追記する運用に切り替える。
 
 ## 完了タスクとcommit
 
@@ -119,9 +122,11 @@ git diff --check
 
 ## 次にやるべき候補
 
-1. T-006のRelease notes/tag案は `docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` に PR #9 で準備済み。次はownerがversion番号・target commit・公開タイミング・notes本文を承認する。owner向け質問リストは `docs/requirements-reassessment-2026-07.md` §6。
-2. T-006承認後、`.claude-plugin/plugin.json` 実装PR（`claude plugin validate --strict` をCI/local検証へ追加）と、READMEへの `npx skills add` 導線追加PRへ進む。実公開や配布物構成の新設は公開前チェック後に扱う。
-3. T-010（上流issueへの紹介コメント）はowner承認があるまで着手しない。
+1. **PR #18（SKILL.md明確化2点）と本handoff更新PRをレビューしてマージする**。差分は小さく、検証4点＋CI Validateはpass済み。レビュー観点: 手順4の健全判定条件（state=success＋expected login＋ls-remote ref）が緩んでいないこと。
+2. T-006のRelease notes/tag案は `docs/release-v0.2.0-brief.md` と `docs/release-v0.2.0-notes-draft.md` に準備済み。次はownerがversion番号・target commit・公開タイミング・notes本文を承認する。owner向け質問リストは `docs/requirements-reassessment-2026-07.md` §6。PR #18マージ後のnotes draftはSKILL.md明確化2点を含む最新版になっている。
+3. T-006承認後、`.claude-plugin/plugin.json` 実装PR（`claude plugin validate --strict` をCI/local検証へ追加。CI変更はworkflowsゲート対象なのでマージ前にowner承認）と、READMEへの `npx skills add` 導線追加PRへ進む。実公開や配布物構成の新設は公開前チェック後に扱う。
+4. T-010（上流issueへの紹介コメント）はowner承認があるまで着手しない。
+5. `docs/requirements-reassessment-2026-07.md` のセカンドオピニオン項は未受領クローズ済み。実装担当が配布価値・成功指標について異見があれば、同docへ追記する形で反映する。
 
 ## 2026/06/29 Codex checkpoint
 
@@ -140,3 +145,10 @@ git diff --check
 
 - PR #12 merge `ef17dbf` 後の `main...origin/main` clean を確認し、GitHub open issue / open PR が0件であることを確認。
 - 残タスクはT-006のowner承認待ち release/tag と、承認後のREADME tag導線・Claude plugin marketplace構成PR。tag push、GitHub Release、plugin marketplace add/install、npm publishは未実施。
+
+## 2026/07/11 Claude Fable5 checkpoint（Codex引き継ぎ）
+
+- 主担当をClaude Fable5からCodexへ引き継ぐ。運用ブリーフは `docs/CODEX_BRIEF_018_windows-github-auth-diagnosis.md`（§3スナップショットは古いのでgit実状態を優先）と `docs/CLAUDECODE_HANDOFF.md` のゲート定義を併読すること。
+- SKILL.md明確化2点（要件再評価§3の改善候補）を PR #18 として作成。検証4点＋CI Validate pass。レビュー後マージ待ち。
+- agmsg経由のCodexセカンドオピニオンは受信チャネル廃止のため未受領クローズ。
+- 残ゲートは従来どおり: T-006（owner 4点承認: version / target commit / 公開タイミング / notes本文）、T-010（外部発信）、`.github/workflows/**` 変更のマージ。承認前のtag push / Release作成 / marketplace add/install / npm publish / 外部発信は未実施のまま。

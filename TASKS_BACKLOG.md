@@ -10,6 +10,7 @@
 更新: 2026/06/30 02:30 JST（Codex: T-008 配布チャネル調査をdocs化）
 更新: 2026/07/01 12:22 JST（Codex: PR #12後のcurrent-stateを同期）
 更新: 2026/07/03 JST（Claude Fable5: 要件再評価をdocs化、T-009/T-010を追加）
+更新: 2026/07/11 JST（Claude Fable5: SKILL.md明確化PR #18作成、Codexへ主担当を引き継ぎ）
 
 ## Goal
 
@@ -74,3 +75,9 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - ローカルのagent-orchestration handoff drafts（`docs/CLAUDECODE_FABLE5_*.md`）はPR #7の前例に従い `.gitignore` 対象として原本非採用。
 - 残ゲートはT-006（owner 4点承認: version / target commit / 公開タイミング / notes本文）。承認前のtag push / Release作成 / marketplace add/install / npm publish / 外部発信は未実施。
 - 同日追記: PR #14 merge `c6d968a` 後、repo description/topics を Codex/Claude Code 両対応の文言と検索導線topics（claude-code / agent-skills / github-cli / sandbox / credential-manager 追加）へ更新（可逆・非ゲート）。T-009 は `docs/skills-sh-channel-evaluation.md` で評価完了。submit不要・現構成のまま `npx skills add` が機能する見込みのため、残る判断はRelease後のREADME導線追加のみ。
+
+## 2026/07/11 Claude Fable5 checkpoint（Codex引き継ぎ）
+
+- 要件再評価§3の改善候補2点（一時的失敗の分類前1回再試行、環境変数由来token sourceの健全判定注記）をSKILL.md/CHANGELOG/release notes draftへ実装し PR #18 を作成。検証4点＋CI Validate pass。セルフ承認マージは実行環境の分類器が拒否したため、レビュー後マージをCodexへ引き継ぐ。
+- agmsg経由のCodex GPT-5.5セカンドオピニオン（2026-07-03依頼）は、メッセージングスクリプトの廃止により受信不能を確認し未受領クローズ。以後の異見は `docs/requirements-reassessment-2026-07.md` へ直接追記する運用。
+- 主担当はCodexへ移管。残タスク: PR #18と引き継ぎdocs PRのレビュー・マージ → T-006 owner 4点承認の取得 → 承認後に `.claude-plugin/plugin.json` PR（CI変更を含むためworkflowsゲート）とREADME `npx skills add` 導線PR → T-010はowner承認まで着手しない。
