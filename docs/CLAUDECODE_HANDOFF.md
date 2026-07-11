@@ -1,8 +1,8 @@
-# ClaudeCode 司令塔 引き継ぎ — windows-github-auth-diagnosis (post-Fable5)
+# 開発引き継ぎ — windows-github-auth-diagnosis
 
-本書は **2026-07-08 以降、または Fable5 の利用上限到達後**に有効な引き継ぎ文書。
-テンプレ正本は codex-global-context repo の `templates/agent-handoff-prompt.md`。
-読み替え: 「Fable5」→「司令塔モデル」（既定は Claude Opus 4.8 role、重い多角検討は Ultracode/Workflow）。
+> **2026-07-11 方針更新**: 開発領域の固定分掌は廃止済み。このファイル名は既存リンクとの
+> 互換性のため残す。開発の主軸は Codex で、依頼範囲を end-to-end で担当する。
+> 廃止済みの `codex` / `codex-deep` MCP bridge と `agmsg` は復活させない。
 
 作成日時: 2026/07/06 JST
 
@@ -10,15 +10,10 @@
 ローカル絶対パス、他リポジトリの内部情報、個人環境の詳細、token値・credential-bearing log
 を書かない。
 
-## 役割分担（モデル固定名を使わない）
+## 開発体制
 
-- **司令塔**: Claude Opus 4.8 role。要件再定義・設計判断・レビュー・Codex への委譲文作成を担当。
-- **実装**: `mcp__codex__codex`（通常タスク）/ `mcp__codex-deep__codex`（難所のみ、xhigh）。
-- **並列調査・機械的作業**: Sonnet 5 subagent（Agent tool 経由）。
-- **フロントエンド/UI**: `frontend-developer` subagent。本 repo は Markdown + PowerShell スクリプト
-  中心で、現時点で UI 実装なし。
-
-固定モデル名をゴールや運用ルールの恒常記述に使わない。役割名で書くこと。
+- Codex が要件整理、PowerShell実装、検証、文書化までを一貫して進める。
+- Claude Code、subagent、外部レビューは必要時の実行手段であり、固定担当ではない。
 
 ## repo 固有の現況
 
@@ -66,10 +61,9 @@
 
 ## 委譲時の注意
 
-Codex へ委譲する際は self-contained spec（対象ファイル・受け入れ条件・検証コマンド・
-書き込み許可範囲）を渡し、再委譲禁止文言と成果物の実在検証を徹底する。本 repo は
-public のため、委譲プロンプト・PR 本文・issue 本文に token 値・credential-bearing log・
-ローカル絶対パス・個人環境の詳細を含めないことを委譲文にも明記する。
+委譲する場合は self-contained spec（対象ファイル・受け入れ条件・検証コマンド・書き込み許可範囲）
+を渡し、成果物の実在と検証結果を主担当が確認する。本 repo は public のため、委譲プロンプト、
+PR 本文、issue 本文に token 値、credential-bearing log、ローカル絶対パス、個人環境の詳細を含めない。
 
 自己検証（`check:all` 相当）はこの repo では npm スクリプトではなく PowerShell 検証一式:
 
