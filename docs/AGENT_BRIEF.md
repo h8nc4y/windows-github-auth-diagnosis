@@ -60,7 +60,8 @@ CI（Validate workflow）は PR と `main` への push で同じ検査を実行�
 `scan-private-markers.ps1` の制約（スキャン対象は git-tracked ファイル。staged を含む）:
 
 - 許可される GitHub repo URL は `https://github.com/h8nc4y/windows-github-auth-diagnosis`（`.git` 付き clone 形式含む）のみ。外部 issue/repo は「owner/repo #番号」の URL なし表記で書く。docs.github.com 等の別ホストは通る。
-- token 接頭辞・秘密鍵ブロック・Bearer 形式ヘッダ・メールアドレス・Windows 絶対パスを検出すると fail（マッチ値は redact される）。
+- token 接頭辞・秘密鍵ブロック・認可ヘッダ形式の token（ルール名 bearer-token-header）・メールアドレス・Windows 絶対パスを検出すると fail（マッチ値は redact される）。
+- 運用文書に検出カテゴリを書くときは、この行のように日本語名かルール名で書き、実際にマッチしうるリテラル形式（token 接頭辞の実文字列や、認可ヘッダの英語慣用句＋半角空白の並び）を直書きしない。ローカルで pass しても実行環境差で CI が fail しうる。
 - 個人環境固有のマーカーは追跡しない `.private-markers.local` か環境変数 `WINDOWS_GITHUB_AUTH_DIAGNOSIS_PRIVATE_MARKERS` に置く。
 
 ## 6. ブランチ・コミット・PR 規約
