@@ -44,10 +44,15 @@ Do not run or suggest `gh auth login`, `gh auth logout`, or `gh auth refresh` ba
    GIT_TERMINAL_PROMPT=0 git -C <repo> ls-remote origin HEAD
    ```
 
+   If a proof command fails in a way that can be transient, such as a network
+   timeout, a DNS or proxy hiccup, or temporary GitHub unavailability, retry the
+   same command once before classifying the result. Classify only reproducible
+   failures.
+
 4. Treat GitHub authentication as healthy only when all of these are true:
 
    - `gh auth status` reports `state=success`.
-   - `gh auth status` reports `tokenSource=keyring` or the documented keyring-backed source for the environment.
+   - `gh auth status` reports `tokenSource=keyring`, the documented keyring-backed source for the environment, or an environment-variable token source such as `GH_TOKEN` or `GITHUB_TOKEN`. An environment-variable token does not depend on keyring visibility, so when the remaining proof checks pass it is a valid healthy state, not a false-negative candidate.
    - `gh api user --jq .login` returns the expected login.
    - `GIT_TERMINAL_PROMPT=0 git -C <repo> ls-remote origin HEAD` returns a ref, unless the remote is intentionally empty and stderr plus exit status show authentication succeeded.
 
