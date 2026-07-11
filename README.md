@@ -2,7 +2,7 @@
 
 [![Validate](https://github.com/h8nc4y/windows-github-auth-diagnosis/actions/workflows/validate.yml/badge.svg)](https://github.com/h8nc4y/windows-github-auth-diagnosis/actions/workflows/validate.yml)
 
-A Codex-style skill for diagnosing Windows GitHub authentication false negatives caused by agent or tool sandboxes that cannot read the Windows keyring.
+An agent skill for Codex and Claude Code that diagnoses Windows GitHub authentication false negatives caused by agent or tool sandboxes that cannot read the Windows keyring.
 
 ## What It Solves
 
@@ -10,7 +10,7 @@ On Windows, a sandboxed agent command can make GitHub authentication look broken
 
 ## Who It Is For
 
-- Codex users and maintainers working on Windows.
+- Codex and Claude Code users and maintainers working on Windows.
 - Agent developers whose tools run `gh` or `git` inside a restricted sandbox.
 - Reviewers who need safe public summaries of GitHub authentication problems without exposing tokens, credentials, or real logs.
 
@@ -102,8 +102,10 @@ The examples use placeholders only. Do not replace them with secret values, raw 
 
 - [Release v0.2.0 brief](docs/release-v0.2.0-brief.md)
 - [Release v0.2.0 notes draft](docs/release-v0.2.0-notes-draft.md)
-- [Claude Code plugin marketplace evaluation](docs/claude-plugin-marketplace-evaluation.md)
+- [Requirements reassessment 2026-07](docs/requirements-reassessment-2026-07.md)
 - [Distribution channel research](docs/distribution-channel-research.md)
+- [Claude Code plugin marketplace evaluation](docs/claude-plugin-marketplace-evaluation.md)
+- [skills.sh channel evaluation](docs/skills-sh-channel-evaluation.md)
 
 Do not publish releases, packages, plugin marketplaces, or external smoke tests until the version, target commit, public text, and channel-specific safety gates are confirmed.
 
