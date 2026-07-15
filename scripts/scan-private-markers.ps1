@@ -47,9 +47,17 @@ Add-ScanRule -Name 'openai-api-key-prefix' -Pattern '(?<![A-Za-z0-9])sk-[A-Za-z0
 Add-ScanRule -Name 'github-classic-token-prefix' -Pattern ('g' + 'hp_') -Kind 'literal'
 Add-ScanRule -Name 'github-fine-grained-token-prefix' -Pattern ('github' + '_pat_') -Kind 'literal'
 Add-ScanRule -Name 'slack-bot-token-prefix' -Pattern ('xo' + 'xb-') -Kind 'literal'
-Add-ScanRule -Name 'bearer-token-header' -Pattern ('Bearer' + ' ') -Kind 'literal'
+# Backport (019/020): require a token-shaped value after the header keyword so prose
+# such as "the Bearer of this note" no longer false-positives; only header-like
+# values (8+ token characters) are flagged. The keyword stays split so this file
+# does not match itself.
+Add-ScanRule -Name 'bearer-token-header' -Pattern ('Bearer' + ' [A-Za-z0-9._\-]{8,}') -Kind 'regex'
 Add-ScanRule -Name 'private-key-block' -Pattern ('BEGIN ' + 'PRIVATE KEY') -Kind 'literal'
-Add-ScanRule -Name 'email-address' -Pattern '\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b' -Kind 'regex'
+# Backport (017/019/020): documentation-safe placeholder addresses are not findings.
+# example.* domains are RFC 2606-reserved; noreply@ and @users.noreply.github.com are
+# common in docs and commit trailers. Real addresses must still be flagged.
+$emailPlaceholderAllowlist = '(?i)^noreply@|@example\.(?:com|org|net)$|@users\.noreply\.github\.com$'
+Add-ScanRule -Name 'email-address' -Pattern '\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b' -Kind 'regex' -Allowlist $emailPlaceholderAllowlist
 # windows-absolute-path detects private-looking absolute Windows paths while allowing
 # documented placeholders. The regex stops before bracketed placeholder segments and
 # can also greedily include trailing prose, so the allowlist suppresses either:

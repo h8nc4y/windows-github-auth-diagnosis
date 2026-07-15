@@ -110,6 +110,7 @@ $requiredFiles = @(
     'examples/diagnosis-checklist.md',
     'examples/final-report-template.md',
     'examples/issue-safe-summary.md',
+    'scripts/check-whitespace.ps1',
     'scripts/scan-private-markers.ps1',
     'scripts/test-scan-private-markers.ps1',
     'scripts/validate-oss-readiness.ps1'
@@ -131,6 +132,7 @@ Assert-FileContains -RelativePath 'SECURITY.md' -Pattern '(?im)do not.*public|pr
 Assert-FileContains -RelativePath '.github/workflows/validate.yml' -Pattern 'validate-oss-readiness\.ps1' -Description 'OSS readiness validation in CI'
 Assert-FileContains -RelativePath '.github/workflows/validate.yml' -Pattern 'scan-private-markers\.ps1' -Description 'private marker scan in CI'
 Assert-FileContains -RelativePath '.github/workflows/validate.yml' -Pattern 'test-scan-private-markers\.ps1' -Description 'private marker scan self-test in CI'
+Assert-FileContains -RelativePath '.github/workflows/validate.yml' -Pattern 'check-whitespace\.ps1' -Description 'empty-tree whitespace check in CI'
 
 Test-SkillFrontmatter
 
