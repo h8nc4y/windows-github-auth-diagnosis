@@ -12,8 +12,7 @@ The release remains blocked until the owner confirms the version number, target 
 
 - Proposed version: `v0.2.0`
 - Proposed tag type: annotated Git tag
-- Current baseline before this preparation branch: `099c3bb` (`Merge pull request #8 from h8nc4y/docs/sync-pr7-handoff-state`)
-- Actual tag target: re-check `origin/main` immediately before release. If this draft is merged, the target should be the resulting `main` tip, not the stale baseline above.
+- Tag target: re-check `origin/main` immediately before release and use the approved `main` tip after all release-scoped pull requests are merged. Do not rely on any baseline commit recorded earlier in this document's history.
 
 ## Release Scope Since 0.1.0
 
@@ -21,6 +20,7 @@ The release remains blocked until the owner confirms the version number, target 
 - Revised README Non-Goals so distribution is in scope, while credential storage and unsafe auth repair advice stay out of scope.
 - Updated GitHub Actions validation to `actions/checkout@v5` and documented why `windows-latest` remains unpinned for this repository.
 - Hardened private-marker scanning with additional synthetic secret-prefix coverage and redaction checks.
+- Clarified the diagnosis procedure: retry a transiently failing proof command once before classifying, and recognize an environment-variable token source as a valid healthy state when the remaining proof checks pass.
 - Recorded advisory review disposition so resolved local advisory docs are not reintroduced as active implementation tasks.
 
 ## Draft Release Notes
