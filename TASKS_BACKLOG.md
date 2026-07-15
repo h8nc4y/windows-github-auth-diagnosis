@@ -39,6 +39,6 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 
 読取専用レビュー（実行検証なし）の指摘。採否と実装は次担当が判断する。完了時は行頭を [x] にし、対応PRを追記する。
 
-- [ ] .github/workflows/validate.yml最終step — CIのクリーンcheckoutでgit diff --checkが恒常パス(無意味チェック)。019のcheck-whitespace.ps1方式(empty-tree比較)へ。confidence高
-- [ ] scan-private-markers.ps1:50 — bearer ruleがliteralな(Bearer+半角空白)で散文もFP。019/020方式のtoken形状必須regexへ。confidence高
-- [ ] 同:52 — email allowlistなし(example.com等プレースホルダも即fail)。017/019/020方式のallowlist追加。confidence高
+- [x] .github/workflows/validate.yml最終step — CIのクリーンcheckoutでgit diff --checkが恒常パス(無意味チェック)。019のcheck-whitespace.ps1方式(empty-tree比較)へ。confidence高（`scripts/check-whitespace.ps1` を新設し CI step を差し替え。validate-oss-readiness にも必須ファイル・CI 配線チェックを追加）
+- [x] scan-private-markers.ps1:50 — bearer ruleがliteralな(Bearer+半角空白)で散文もFP。019/020方式のtoken形状必須regexへ。confidence高（token 8文字以上必須の regex へ変更。散文パス／token検出の自己テスト追加）
+- [x] 同:52 — email allowlistなし(example.com等プレースホルダも即fail)。017/019/020方式のallowlist追加。confidence高（example.* / noreply@ / @users.noreply.github.com を allowlist 化。プレースホルダ許容／実アドレス検出の自己テスト追加）

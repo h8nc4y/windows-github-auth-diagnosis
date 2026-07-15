@@ -139,6 +139,65 @@ You can also write C:\Users\<name>\project to describe a user directory.
         Add-Failure "Expected placeholder Windows path doc to pass, but scanner exited $($winPathDocResult.ExitCode): $($winPathDocResult.Output.Trim())"
     }
 
+    # bearer-token-header (backport 019/020): prose containing the bare keyword must
+    # not be a finding. The keyword is split so this test file does not flag itself
+    # under older literal-rule builds.
+    $bearerProseRoot = Join-Path $tempRoot 'bearer-prose'
+    New-Item -ItemType Directory -Path $bearerProseRoot | Out-Null
+    $bearerProse = 'The ' + ('Bear' + 'er') + ' of this note is trusted.'
+    Set-Content -LiteralPath (Join-Path $bearerProseRoot 'doc.md') -Value $bearerProse -Encoding UTF8
+    $bearerProseResult = Invoke-Scanner -ScanPath $bearerProseRoot
+    if ($bearerProseResult.ExitCode -ne 0) {
+        Add-Failure "Expected bare Bearer prose fixture to pass, but scanner exited $($bearerProseResult.ExitCode): $($bearerProseResult.Output.Trim())"
+    }
+
+    # bearer-token-header: a token-shaped value after the keyword must still fail.
+    $bearerTokenRoot = Join-Path $tempRoot 'bearer-token'
+    New-Item -ItemType Directory -Path $bearerTokenRoot | Out-Null
+    $bearerTokenMarker = ('Bear' + 'er ') + 'SyntheticHeaderValue0000'
+    Set-Content -LiteralPath (Join-Path $bearerTokenRoot 'leak.txt') -Value "synthetic marker: $bearerTokenMarker" -Encoding UTF8
+    $bearerTokenResult = Invoke-Scanner -ScanPath $bearerTokenRoot
+    # Failure messages avoid the header keyword followed by a long token-shaped
+    # word, so this test file cannot trip the shipped rule on itself.
+    if ($bearerTokenResult.ExitCode -eq 0) {
+        Add-Failure 'Expected the token-shaped header fixture to fail, but scanner exited 0.'
+    }
+    if ($bearerTokenResult.Output -notmatch 'bearer-token-header') {
+        Add-Failure "Expected the header fixture output to name bearer-token-header. Output: $($bearerTokenResult.Output.Trim())"
+    }
+    if ($bearerTokenResult.Output.Contains($bearerTokenMarker)) {
+        Add-Failure 'Expected bearer-token-header finding to be redacted, but the raw marker leaked into output.'
+    }
+
+    # email-address allowlist (backport 017/019/020): documentation placeholders must
+    # not be findings. These literals are safe here because the shipped scanner
+    # allowlists them as well.
+    $emailPlaceholderRoot = Join-Path $tempRoot 'email-placeholder'
+    New-Item -ItemType Directory -Path $emailPlaceholderRoot | Out-Null
+    Set-Content -LiteralPath (Join-Path $emailPlaceholderRoot 'doc.md') -Value @(
+        'Contact: user@example.com'
+        'Sender: noreply@service.example.org'
+        'Trailer: octocat@users.noreply.github.com'
+    ) -Encoding UTF8
+    $emailPlaceholderResult = Invoke-Scanner -ScanPath $emailPlaceholderRoot
+    if ($emailPlaceholderResult.ExitCode -ne 0) {
+        Add-Failure "Expected placeholder email fixture to pass, but scanner exited $($emailPlaceholderResult.ExitCode): $($emailPlaceholderResult.Output.Trim())"
+    }
+
+    # email-address: a real-looking (non-placeholder) address must still fail. The
+    # address is assembled at runtime so this test file itself carries no literal.
+    $emailRealRoot = Join-Path $tempRoot 'email-real'
+    New-Item -ItemType Directory -Path $emailRealRoot | Out-Null
+    $realEmail = 'someone' + '@' + 'privatecorp.co.jp'
+    Set-Content -LiteralPath (Join-Path $emailRealRoot 'doc.md') -Value "Contact: $realEmail" -Encoding UTF8
+    $emailRealResult = Invoke-Scanner -ScanPath $emailRealRoot
+    if ($emailRealResult.ExitCode -eq 0) {
+        Add-Failure 'Expected real-looking email fixture to fail, but scanner exited 0.'
+    }
+    if ($emailRealResult.Output -notmatch 'email-address') {
+        Add-Failure "Expected real email output to name email-address. Output: $($emailRealResult.Output.Trim())"
+    }
+
     $localMarkerRoot = Join-Path $tempRoot 'local-marker'
     New-Item -ItemType Directory -Path $localMarkerRoot | Out-Null
     Set-Content -LiteralPath (Join-Path $localMarkerRoot '.private-markers.local') -Value 'local-only-marker' -Encoding UTF8

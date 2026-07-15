@@ -37,4 +37,6 @@ jobs:
 
       - name: Check whitespace
         shell: pwsh
-        run: git diff --check --exit-code
+        # Empty-tree comparison inside the script checks every committed line;
+        # a bare `git diff --check` always passed on CI's clean checkout.
+        run: ./scripts/check-whitespace.ps1
