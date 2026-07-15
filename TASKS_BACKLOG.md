@@ -34,3 +34,11 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - 2026/07/03: Claude Fable5 が要件再評価（PR #14）と T-009 評価（PR #15）。repo description/topics を検索導線強化のため更新。`.claude-plugin/plugin.json` 必須フィールドは `name` のみで root 直下 SKILL.md 構成のまま plugin 成立を確認。
 - 2026/07/06: 運用ノート取り込み（PR #16）・post-Fable5 引き継ぎ文書（PR #17）。
 - 2026/07/11〜12: SKILL.md 明確化2点を PR #18 化。旧エージェント間メッセージング経由のセカンドオピニオンはチャネル廃止により未受領クローズ。docs 再編（本 PR #19: HANDOFF/本台帳の圧縮、旧運用ブリーフ2本を `docs/AGENT_BRIEF.md` へ統合）。主担当を Codex へ移管。
+
+## 外部レビュー指摘の台帳（2026-07-15 maxエフォート横断レビュー）
+
+読取専用レビュー（実行検証なし）の指摘。採否と実装は次担当が判断する。完了時は行頭を [x] にし、対応PRを追記する。
+
+- [ ] .github/workflows/validate.yml最終step — CIのクリーンcheckoutでgit diff --checkが恒常パス(無意味チェック)。019のcheck-whitespace.ps1方式(empty-tree比較)へ。confidence高
+- [ ] scan-private-markers.ps1:50 — bearer ruleがliteralな(Bearer+半角空白)で散文もFP。019/020方式のtoken形状必須regexへ。confidence高
+- [ ] 同:52 — email allowlistなし(example.com等プレースホルダも即fail)。017/019/020方式のallowlist追加。confidence高
