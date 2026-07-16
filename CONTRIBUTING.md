@@ -36,6 +36,15 @@ pwsh -NoProfile -File .\scripts\test-scan-private-markers.ps1
 pwsh -NoProfile -File .\scripts\scan-private-markers.ps1
 ```
 
+On Git Bash, WSL, macOS, Linux, or any other POSIX shell with PowerShell 7
+(`pwsh`) installed, use forward slashes:
+
+```bash
+pwsh -NoProfile -File ./scripts/validate-oss-readiness.ps1
+pwsh -NoProfile -File ./scripts/test-scan-private-markers.ps1
+pwsh -NoProfile -File ./scripts/scan-private-markers.ps1
+```
+
 ## Pull Request Expectations
 
 - Explain the problem and the chosen fix.
