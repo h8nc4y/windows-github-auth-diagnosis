@@ -31,10 +31,10 @@ Manual Codex-style skill install on shells with POSIX syntax:
 dest="${HOME}/.agents/skills/windows-github-auth-diagnosis"
 if [ -e "$dest" ]; then
   echo "Install target already exists: $dest"
-  exit 1
+else
+  mkdir -p "$dest"
+  cp SKILL.md "$dest/SKILL.md"
 fi
-mkdir -p "$dest"
-cp SKILL.md "$dest/SKILL.md"
 ```
 
 Manual Codex-style skill install from PowerShell:
@@ -60,10 +60,10 @@ Install for your user account on shells with POSIX syntax:
 dest="${HOME}/.claude/skills/windows-github-auth-diagnosis"
 if [ -e "$dest" ]; then
   echo "Install target already exists: $dest"
-  exit 1
+else
+  mkdir -p "$dest"
+  cp SKILL.md "$dest/SKILL.md"
 fi
-mkdir -p "$dest"
-cp SKILL.md "$dest/SKILL.md"
 ```
 
 Install for your user account from PowerShell:
@@ -149,6 +149,16 @@ If `pwsh` is available, the same checks can be run with:
 pwsh -NoProfile -File .\scripts\validate-oss-readiness.ps1
 pwsh -NoProfile -File .\scripts\test-scan-private-markers.ps1
 pwsh -NoProfile -File .\scripts\scan-private-markers.ps1
+```
+
+On Git Bash, WSL, macOS, Linux, or any other POSIX shell with PowerShell 7
+(`pwsh`) installed, use forward slashes (backslash paths are mangled by POSIX
+word splitting):
+
+```bash
+pwsh -NoProfile -File ./scripts/validate-oss-readiness.ps1
+pwsh -NoProfile -File ./scripts/test-scan-private-markers.ps1
+pwsh -NoProfile -File ./scripts/scan-private-markers.ps1
 ```
 
 Also run a skill frontmatter validation tool when available, and run Git whitespace checks before publishing:
