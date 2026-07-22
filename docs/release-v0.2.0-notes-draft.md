@@ -13,6 +13,8 @@ Status: draft. Review and approve before using this text in a GitHub Release.
 
 ## Changed
 
+- The diagnosis procedure now retries a transiently failing proof command once before classifying the result, so temporary network or GitHub availability problems are not misclassified.
+- The healthy-state criteria now recognize an environment-variable token source such as `GH_TOKEN` or `GITHUB_TOKEN` as valid when the remaining proof checks pass, because it does not depend on keyring visibility.
 - README distribution guidance now allows GitHub Releases, Codex/Claude Code install paths, future plugin or marketplace packaging, and other distribution work when the safety boundaries are preserved.
 - GitHub Actions validation now uses `actions/checkout@v5`; `windows-latest` remains intentionally unpinned because the workflow only depends on `pwsh` and `git`.
 - Handoff and backlog state now reflect that T-003, scanner hardening, and advisory disposition have been merged.
