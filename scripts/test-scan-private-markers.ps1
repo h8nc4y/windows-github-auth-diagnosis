@@ -461,6 +461,8 @@ if ($failedNames.Count -gt 0) {
         $hermeticEnvironmentEncoded
     )
     $beforeHermeticEnvironmentProbe = Get-ProcessEnvironmentSnapshot
+    # hosted WindowsのPS5.1 cold startは固定環境で10秒を超えることがある。
+    # production Git timeoutは変えず、この環境観測probeだけを有限30秒にする。
     $hermeticEnvironmentResult = Invoke-PrivateMarkerProcess `
         -FileName $currentPowerShellExecutable `
         -Arguments $hermeticEnvironmentArguments `
@@ -479,7 +481,7 @@ if ($failedNames.Count -gt 0) {
         -IsolationRoot $hermeticEnvironmentIsolationRoot `
         -MaximumStandardOutputBytes 128 `
         -MaximumStandardErrorBytes 4096 `
-        -TimeoutMilliseconds 10000
+        -TimeoutMilliseconds 30000
     Assert-ProcessEnvironmentUnchanged `
         -Expected $beforeHermeticEnvironmentProbe `
         -Context 'Hermetic Git child probe'
