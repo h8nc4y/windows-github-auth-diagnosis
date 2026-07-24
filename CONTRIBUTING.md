@@ -17,6 +17,26 @@ Thanks for improving this skill. This repository is intentionally small: changes
 4. Add or adjust validation when a safety rule should be machine-checkable.
 5. Run the validation commands before opening a pull request.
 
+Scanner and workflow changes must preserve the bounded process helper, the
+PowerShell 7 / Windows PowerShell 5.1 / Ubuntu execution matrix, exact pinned
+checkout revision, finite job timeouts, and fail-closed Git/index/path
+boundary. On Windows, preserve suspended direct launch, Job assignment before
+resume, bounded launch-failure cleanup, and parent-first Job close before
+stream drain. A failed Job close must retain handle ownership for bounded
+Stop/Dispose retries and process-tree termination fallback. Process-helper and
+Git-isolation failures must emit only the fixed path-free integrity diagnostic.
+The first-call AST gate must reject target shadows, aliases, module-qualified
+lookup, function-provider references, stored/generated ScriptBlock
+`.Invoke*()` calls and command sinks, provider writes, process-boundary
+bootstrap replacement, invoked class members/static initialization, and
+expression or pipeline indirection before the binary fixture. Invalid
+scan-deadline input must keep the fixed path-free exit-2 contract. Workflow
+validation must reject
+extra triggers, permissions,
+jobs, quoted/flow aliases of those mappings, and active lines outside the
+canonical indentation. Keep fixtures synthetic and verify native cleanup
+failures without printing environment values.
+
 ## Validation
 
 From the repository root, run:
@@ -44,6 +64,12 @@ pwsh -NoProfile -File ./scripts/validate-oss-readiness.ps1
 pwsh -NoProfile -File ./scripts/test-scan-private-markers.ps1
 pwsh -NoProfile -File ./scripts/scan-private-markers.ps1
 ```
+
+The GitHub workflow repeats these checks on `windows-latest` and Ubuntu 24.04.
+On Windows it also runs the scanner self-test with Windows PowerShell 5.1.
+Before committing, run `git diff --check`; the CI whitespace script compares
+the committed tree with Git's empty tree so a clean checkout is not a vacuous
+pass.
 
 ## Pull Request Expectations
 

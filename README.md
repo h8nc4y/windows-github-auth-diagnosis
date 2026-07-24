@@ -167,7 +167,37 @@ Also run a skill frontmatter validation tool when available, and run Git whitesp
 git diff --check
 ```
 
-The GitHub Actions workflow runs the same local validation, scan self-test, private-marker scan, and whitespace check on pull requests and pushes to `main`.
+The GitHub Actions workflow runs the readiness check, scanner self-test,
+private-marker scan, and whitespace check on pull requests and pushes to
+`main`. Windows runs the scanner self-test under both PowerShell 7 and Windows
+PowerShell 5.1; a separate Ubuntu 24.04 job verifies the PowerShell 7 / POSIX
+process path. Both jobs have finite timeouts, and `actions/checkout` is pinned
+to a reviewed commit.
+
+The scanner uses `scripts/private-marker-process.ps1` as a bounded,
+binary-safe child-process boundary. It scans the union of regular stage-0
+index blobs and tracked worktree files, rejects unsafe Git/index/path state,
+and fails closed when a repository boundary cannot be verified. Entry, byte,
+line, finding, diagnostic-output, child-process, and scan-wide limits prevent
+unbounded maintenance checks. On Windows, the direct target starts suspended,
+enters a kill-on-close Job before resume, and is removed with a bounded wait
+when assignment or resume fails. After the direct parent exits, the Job closes
+before finite stream draining so a descendant cannot keep inherited pipes
+alive. Job-close failures retain the owned handle across bounded Stop/Dispose
+retries and terminate the contained Job as a fallback; launch cleanup also
+retains direct-process termination when an assigned Job cannot be closed.
+Git children receive a fixed minimal environment allowlist rather than the
+parent process environment, so unrelated credential, marker, loader, and agent
+variables do not cross the process boundary.
+Missing or failing helpers and Git-isolation setup/cleanup failures return only
+the fixed, path-free `integrity: process-boundary` diagnostic with exit code 2.
+Invalid scan-deadline input likewise returns only the fixed, path-free
+`integrity: scan-deadline` diagnostic with exit code 2.
+POSIX hosts use a separately bounded process-group boundary: the child reports
+its session-leader PID only after `setsid`, and the parent verifies that PID as
+the process-group ID before releasing the target. These
+integrity controls make failure safer; they do not turn the curated marker
+rules into proof that a repository has no secrets.
 
 ## Contributing
 
