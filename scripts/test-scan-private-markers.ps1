@@ -503,7 +503,14 @@ if ($failedNames.Count -gt 0) {
         } else {
             "exit=$($hermeticEnvironmentResult.ExitCode)," +
                 "stdout-bytes=$($hermeticEnvironmentResult.StandardOutputBytes.Length)," +
-                "stderr-bytes=$($hermeticEnvironmentResult.StandardErrorBytes.Length)"
+                "stderr-bytes=$($hermeticEnvironmentResult.StandardErrorBytes.Length)," +
+                "timed-out=$($hermeticEnvironmentResult.TimedOut)," +
+                "output-limit=$($hermeticEnvironmentResult.OutputLimitExceeded)," +
+                "input-failed=$($hermeticEnvironmentResult.InputWriteFailed)," +
+                "pipe-leak=$($hermeticEnvironmentResult.PipeLeakDetected)," +
+                "containment=$($hermeticEnvironmentResult.ContainmentEstablished)," +
+                "streams=$($hermeticEnvironmentResult.StreamsCompleted)," +
+                "tree-stopped=$($hermeticEnvironmentResult.TreeStopped)"
         }
         Add-Failure "Expected sanitized Git child to receive only the fixed hermetic environment allowlist. Detail: $hermeticEnvironmentDetail"
     }
