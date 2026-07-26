@@ -1,6 +1,6 @@
 # Agent operations brief — windows-github-auth-diagnosis
 
-最終更新: 2026/07/24 JST
+最終更新: 2026/07/27 JST
 
 本書は、このリポジトリを主担当する開発エージェント（Codex / Claude Code いずれでも）向けの運用正本である。旧 `docs/CODEX_BRIEF_018_windows-github-auth-diagnosis.md` と旧 `docs/CLAUDECODE_HANDOFF.md` を統合し、陳腐化したスナップショット・廃止済みの役割分担記述を除去した（2026-07-12）。
 
@@ -27,12 +27,14 @@
 
 自走してよい: タスク選定、実装、検証、ブランチ作成、コミット、push、PR 作成、非ゲート PR のマージ、マージ済みブランチ削除、docs 更新。
 
-次のいずれかに触れる操作は、**実行/マージの直前で停止して owner の承認を得る**:
+次のいずれかに触れる操作は、**対応する実行/マージ/公開の直前で停止して owner の承認を得る**:
 
-- **① リリース・CI**: git tag の作成/push、GitHub Release の作成、あらゆるデプロイ、`.github/workflows/**` を変更する PR のマージ。
+- **① リリース**: git tag の作成/push、GitHub Release の作成、および承認対象の Release に束ねる外部公開。
 - **② 課金**: 有料 API・課金サービスの利用。
-- **③ secret・外部発信**: token・認証情報・実ログ・実データの外部送信、上流 issue へのコメント等の外部発信（T-010 系）。
+- **③ secret・外部発信**: token・認証情報・実ログ・実データの外部送信、上流 issue へのコメント、marketplace 登録等の外部発信（T-010 系）。
 - **④ 契約変更**: `SKILL.md` の Core Rule / Procedure / Prohibited Responses / Exceptions To Preserve、および README の Non-Goals が定めるスコープ・約束の変更。文面の明確化・誤記修正・既定方針内の追記は④に当たらない。
+
+`.github/workflows/**` の変更自体はゲート①ではない。ローカル検証、敵対的セルフレビューまたは独立レビュー、PR の current-head CI が揃えば通常の CI 変更 PR として merge できる。workflow の変更が tag / GitHub Release / 外部公開を実行する場合は、その実行部分に対応するゲートを維持する。
 
 承認依頼は「対象操作 / 該当ゲート / 判断材料 / 承認後の実行コマンド」を明記して owner に出す。承認待ちの間は他の非ゲートタスクを進めてよく、待機のために停止しない。
 
