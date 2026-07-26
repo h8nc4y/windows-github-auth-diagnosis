@@ -1,44 +1,29 @@
 # HANDOFF
 
-最終更新: 2026/07/27 JST（Codex: T-012 PR #26 fresh review 修正中）
+最終更新: 2026/07/27 JST（Codex: T-012 merge・post-main 検証済み）
 
-運用ルール・ゲート・検証手順の正本は `docs/AGENT_BRIEF.md`、タスク台帳の正本は `TASKS_BACKLOG.md`。本書は「現在地」だけを持つ。文書と実状態が食い違ったら `git log` / `gh pr list` / `gh issue list` / `gh release list` を一次情報とする。
+運用ルール・ゲート・検証手順の正本は `docs/AGENT_BRIEF.md`、タスク台帳の正本は `TASKS_BACKLOG.md`。文書と実状態が食い違う場合は Git / GitHub の実状態を優先する。
 
-## リポジトリの目的
+## 現在地
 
-Windows 上の agent/tool sandbox が Windows keyring を読めず GitHub 認証が壊れて見える偽陰性を、安全に診断する agent skill（`SKILL.md` が本体）。配布・普及フェーズ。
+- Windows keyring を読めない sandbox 内の GitHub 認証偽陰性を、安全に診断する agent skill。配布・普及フェーズ。
+- **T-012（Class M）は完了**。PR #26 を source commit `0066c6c`、merge commit `6ffb095` で merge した。open PR / issue / GitHub Release は確認時点で0件。
+- scanner は bounded process helper、Git/index/worktree/path/resource 境界、Windows Job / POSIX process-group cleanup、strict byte transport、固定診断、AST early-call gate、workflow exact envelope を共有する。
+- fresh review で、PS5.1 healthy cold-start限定retry、direct PID + nonce provenance、全resource cleanupとprimary保持、単一deadline、native ownership、scan-wide timeout分類、conditional state dominance、reflective class activation拒否まで統合した。production Git timeout 15秒は不変。
+- workflow 変更 PR はゲート①ではない。通常のローカル検証・review・current-head CI 後に merge できる。tag / GitHub Release / marketplace 公開の各ゲートは維持する。
 
-## 現在地（2026-07-27）
+## 次の一手
 
-- 着手時の `main` / `origin/main` は merge commit `c664ecf`。open PR 0件、open issue 0件、GitHub Release 0件。
-- T-001〜T-005・T-007〜T-009・T-011 は完了。T-011（PR #18）は、一時的失敗の1回再試行と環境変数由来 token source の健全判定注記を追加した。
-- 直近の基盤整備は完了済み: docs 統合（PR #19）、外部レビュー台帳（PR #21）、scanner / whitespace 修正（PR #22）、`CODEX_START_HERE.md`（PR #23）、Windows PowerShell 5.1 の scanner 回帰修正（PR #24）。
-- **T-012（Class M）PR #26 open**: `fix/hermetic-private-marker-scan` で scanner を共通の bounded process helper へ移行し、Git/index/worktree/path/resource 境界、Windows Job / POSIX process-group cleanup、strict byte transport、redacted process-boundary / deadline 診断、AST early-call indirection、workflow exact envelope の回帰を追加した。
-- 2026-07-27 の fresh CI で Windows PowerShell 5.1 の test-only hermetic probe が、outputなし・境界内完全停止のcold-start timeoutになった。観測probeだけ同じ30秒budgetで1回再試行し、それ以外のsignalと2回目timeoutはfail closed。production Git timeout 15秒は不変。
-- fresh process-boundary review を反映済み: POSIX readyをdirect PID + nonceへbindしたatomic strict-ASCII protocol（同PID・同長のforged nonceも拒否）、primaryをmaskしない全resource cleanupと順序固定aggregate、CloseHandle成功時だけのownership解放、Windows resume / POSIX release直前まで同じclockを強制する単一monotonic deadline。scan-wide残時間で切れたGit childはreturned timeout / POSIX gate exceptionの両方を`scan-deadline`分類し、期限前の真のstartup failureは`process-boundary`を維持。Windows PowerShell 5.1だけのretry、conditional variable/alias stateをUnknownへ閉じるsource-order dominance、dynamic Type receiver / dynamic member名 / member名の大小文字差 / runtime Type `::new()` / `New-Object`を含むreflective class activation拒否も追加した。
+1. **T-013（Class M）**: native macOS process-group 検証の実現性を一次情報と bounded CI で評価する。macOS native は現在 `未確認`。
+2. **T-006 GitHub Release v0.2.0（ゲート①）**: owner の4点承認（version / target commit / 公開タイミング / notes本文）が揃うまで tag push / Release 作成をしない。
+3. **T-006 承認後**: `.claude-plugin/plugin.json` と `claude plugin validate --strict` を別PRで追加する。実装PRは通常review/CIでmergeできるが、marketplace公開はゲート③。
+4. **T-010（ゲート③）**: 上流 issue への紹介コメントは owner 承認まで行わない。
 
-## 次の一手とゲート
-
-1. **T-012**: WIPを最終scan・独立reviewで凍結し、commit / push後のfresh CIを確認してPR #26をmergeする。merge後はmain実測とhandoff/task台帳を別docs PRで同期する。
-2. **T-006 GitHub Release v0.2.0**（ゲート①）: owner の4点承認（version 番号 / target commit / 公開タイミング / notes 本文 `docs/release-v0.2.0-notes-draft.md`）が揃うまで tag push / Release 作成をしない。質問リストは `docs/requirements-reassessment-2026-07.md` §6。
-3. **T-006 承認後**: `.claude-plugin/plugin.json` PR と `claude plugin validate --strict` の検証追加を進める。CI 変更を含む PR のマージはゲート①。Release 後に README へ `npx skills add` 導線を追加する。
-4. **T-010 上流 issue への紹介コメント**（ゲート③・外部発信）: owner 承認まで着手しない。
-
-承認待ちの間に廃止済み integration や旧エージェント間メッセージングを復活させない。
+廃止済み integration や旧エージェント間メッセージングを復活させない。
 
 ## 検証
 
-2026-07-27 の T-012 WIP作業ツリーで以下を実測:
-
-- PowerShell 7 / Windows PowerShell 5.1: 修正後 scanner self-test、readiness、repo scan は pass。
-- Ubuntu 24.04相当 PowerShell 7.5 container（`--network none`）: scanner self-test、readiness、repo scan、whitespace は pass。
-- `git diff --check` は pass。Gitleaks 8.30.1 directory scanは約632 KB・0 findings、Semgrep 1.165.0は39 rules / 32 tracked files・0 findings。
-- AST gate は target shadow、scope/module-qualified wrapper、built-in alias、`Get-Command` / function-provider 参照、保存/生成 ScriptBlock の `.Invoke*()` / `ForEach-Object` / `Where-Object` / `Invoke-Command`、provider mutation、`processBoundary` 上書き、class constructor/member/static initialization、expression/pipeline、dynamic call を fail closed。
-- 不正値とruntime期限超過の `ScanDeadlineMilliseconds` は固定 path-free `integrity: scan-deadline` + exit 2 へ統一。
-- helper欠落/例外、unhealthy child、isolation作成/削除を固定 path-free `integrity: process-boundary` + exit 2 へ統一。全cleanupを試行してprimaryと集約し、native ownershipはclose成功まで保持する。
-- workflow gate は quoted/flow extra mapping と未消費 active indentation を拒否。
-
-## ブランチ状況
-
-- local task branch は `fix/hermetic-private-marker-scan`。2026-07-27 review修正を統合済み。着手時のremote headは `309b82e` で、fresh commit / push / CI / mergeの最新状態はGit/GitHubを再確認する。
-- local backup `backup/018-main-pre-align-20260629` は履歴保全用のため削除しない。
+- freeze hash `2d524a9d09d2c40925dd5e5cd5ae9fec1d8b0e4f` の独立reviewは P0〜P3=0。PR current-head CI run 30222283213 と main push CI run 30222508500 は Windows / Ubuntu とも success。
+- post-main: PowerShell 7 / Windows PowerShell 5.1 の full self-test・readiness・repo scan、Linux PowerShell 7.5 の network-none / read-only full self-test・readiness・repo scan・whitespaceを実測し pass。
+- `git diff --check` pass。Gitleaks 8.30.1 は約632 KB・0 findings、Semgrep 1.165.0 は39 rules / 32 tracked files・0 findings。
+- local / remote の T-012 task branch は削除済み。履歴保全用 `backup/018-main-pre-align-20260629` は削除しない。
