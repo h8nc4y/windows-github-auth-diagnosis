@@ -167,7 +167,52 @@ Also run a skill frontmatter validation tool when available, and run Git whitesp
 git diff --check
 ```
 
-The GitHub Actions workflow runs the same local validation, scan self-test, private-marker scan, and whitespace check on pull requests and pushes to `main`.
+The GitHub Actions workflow runs the readiness check, scanner self-test,
+private-marker scan, and whitespace check on pull requests and pushes to
+`main`. Windows runs the scanner self-test under both PowerShell 7 and Windows
+PowerShell 5.1; a separate Ubuntu 24.04 job verifies the PowerShell 7 / POSIX
+process path. Both jobs have finite timeouts, and `actions/checkout` is pinned
+to a reviewed commit.
+
+The scanner uses `scripts/private-marker-process.ps1` as a bounded,
+binary-safe child-process boundary. It scans the union of regular stage-0
+index blobs and tracked worktree files, rejects unsafe Git/index/path state,
+and fails closed when a repository boundary cannot be verified. Entry, byte,
+line, finding, diagnostic-output, child-process, and scan-wide limits prevent
+unbounded maintenance checks. On Windows, the direct target starts suspended,
+enters a kill-on-close Job before resume, and is removed with a bounded wait
+when assignment or resume fails. After the direct parent exits, the Job closes
+before finite stream draining so a descendant cannot keep inherited pipes
+alive. Job-close failures retain the owned handle across bounded Stop/Dispose
+retries and terminate the contained Job as a fallback; launch cleanup also
+retains direct-process termination when an assigned Job cannot be closed.
+Every stream and native resource is still attempted when cleanup fails, the
+primary failure is preserved in the aggregate, and native-handle ownership is
+released only after a successful close. One monotonic target deadline covers
+environment preparation, launch, POSIX gating, and process polling; finite
+tree/stream cleanup grace remains separate. Windows resume and POSIX release
+both recheck that same clock immediately before target execution.
+Git children receive a fixed minimal environment allowlist rather than the
+parent process environment, so unrelated credential, marker, loader, and agent
+variables do not cross the process boundary.
+Missing or failing helpers and Git-isolation setup/cleanup failures return only
+the fixed, path-free `integrity: process-boundary` diagnostic with exit code 2.
+Invalid or elapsed scan deadlines likewise return only the fixed, path-free
+`integrity: scan-deadline` diagnostic with exit code 2. A Git child timeout
+whose effective cap came from the scan-wide remaining budget uses this
+deadline result; the unchanged Git-specific timeout remains a process-boundary
+failure. POSIX gate-startup exceptions follow the same split: only an
+exception observed after the scan-wide deadline becomes `scan-deadline`.
+POSIX hosts use a separately bounded process-group boundary: the child reports
+an atomic, strict ASCII record containing the direct launcher PID and a launch
+nonce only after `setsid`. The parent requires byte-exact provenance and
+verifies that the same PID is the process-group ID before releasing the target.
+These
+integrity controls make failure safer; they do not turn the curated marker
+rules into proof that a repository has no secrets.
+The AST first-call gate also fails closed on runtime-Type `::new()` receivers
+and on conditional variable or alias writes that cannot be proven executed;
+only direct known-safe type expressions and straight-line state remain eligible.
 
 ## Contributing
 

@@ -12,24 +12,27 @@ permissions:
 jobs:
   validate:
     name: Validate skill repository
-    # windows-latest (Windows Server 2025) is intentional and left unpinned:
-    # this job only needs pwsh + git, so the runner image migration does not
-    # affect it. Pin to a dated label (e.g. windows-2022) only if a future step
-    # depends on image-specific preinstalled tooling.
+    # pwsh / Windows PowerShell 5.1 / git に依存するため windows-latest を維持する。
+    # image 固有toolへ依存する変更を入れる場合だけ dated label を再検討する。
     runs-on: windows-latest
+    # hardened scanner self-test を PS7 / PS5.1 で直列実行する。
+    # hosted runner の揺らぎを吸収しつつ、無制限待機は許可しない。
+    timeout-minutes: 25
     steps:
       - name: Check out repository
-        # checkout@v5 runs on Node.js 24; @v4 ran on Node.js 20, which the runner
-        # now flags as deprecated. Bump majors to silence that annotation.
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Validate OSS readiness
         shell: pwsh
         run: ./scripts/validate-oss-readiness.ps1
 
-      - name: Test private marker scan
+      - name: Test private marker scan (PowerShell 7)
         shell: pwsh
         run: ./scripts/test-scan-private-markers.ps1
+
+      - name: Test private marker scan (Windows PowerShell 5.1)
+        shell: powershell
+        run: .\scripts\test-scan-private-markers.ps1
 
       - name: Scan for private markers
         shell: pwsh
@@ -37,6 +40,28 @@ jobs:
 
       - name: Check whitespace
         shell: pwsh
-        # Empty-tree comparison inside the script checks every committed line;
-        # a bare `git diff --check` always passed on CI's clean checkout.
+        run: ./scripts/check-whitespace.ps1
+
+  validate-ubuntu:
+    name: Validate skill repository on Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Validate OSS readiness on Ubuntu
+        shell: pwsh
+        run: ./scripts/validate-oss-readiness.ps1
+
+      - name: Test private marker scan (PowerShell 7 on Ubuntu)
+        shell: pwsh
+        run: ./scripts/test-scan-private-markers.ps1
+
+      - name: Scan for private markers on Ubuntu
+        shell: pwsh
+        run: ./scripts/scan-private-markers.ps1
+
+      - name: Check whitespace on Ubuntu
+        shell: pwsh
         run: ./scripts/check-whitespace.ps1

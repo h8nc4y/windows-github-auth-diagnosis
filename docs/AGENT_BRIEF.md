@@ -1,6 +1,6 @@
 # Agent operations brief — windows-github-auth-diagnosis
 
-最終更新: 2026/07/12 JST
+最終更新: 2026/07/24 JST
 
 本書は、このリポジトリを主担当する開発エージェント（Codex / Claude Code いずれでも）向けの運用正本である。旧 `docs/CODEX_BRIEF_018_windows-github-auth-diagnosis.md` と旧 `docs/CLAUDECODE_HANDOFF.md` を統合し、陳腐化したスナップショット・廃止済みの役割分担記述を除去した（2026-07-12）。
 
@@ -56,6 +56,11 @@ git diff --check
 ```
 
 CI（Validate workflow）は PR と `main` への push で同じ検査を実行する。
+Windows job は scanner self-test を PowerShell 7 と Windows PowerShell 5.1
+の両方で実行し、Ubuntu 24.04 job は POSIX process-group 経路を検証する。
+両 job は有限 timeout を持ち、checkout action は reviewed commit に固定する。
+workflow envelope は trigger / permission / job ID / active indentation を
+exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒否する。
 
 `scan-private-markers.ps1` の制約（スキャン対象は git-tracked ファイル。staged を含む）:
 
@@ -63,6 +68,40 @@ CI（Validate workflow）は PR と `main` への push で同じ検査を実行�
 - token 接頭辞・秘密鍵ブロック・認可ヘッダ形式の token（ルール名 bearer-token-header）・メールアドレス・Windows 絶対パスを検出すると fail（マッチ値は redact される）。
 - 運用文書に検出カテゴリを書くときは、この行のように日本語名かルール名で書き、実際にマッチしうるリテラル形式（token 接頭辞の実文字列や、認可ヘッダの英語慣用句＋半角空白の並び）を直書きしない。ローカルで pass しても実行環境差で CI が fail しうる。
 - 個人環境固有のマーカーは追跡しない `.private-markers.local` か環境変数 `WINDOWS_GITHUB_AUTH_DIAGNOSIS_PRIVATE_MARKERS` に置く。
+- Git/index/file 境界、strict UTF-8、resource limit、child process cleanup
+  を検証できない場合は fail closed。Git-backed mode は通常 stage-0
+  index blob と tracked worktree の和集合を検査し、開始時・終了時の
+  index/flags drift も拒否する。
+- `scripts/private-marker-process.ps1` は binary-safe stream、有限 timeout、
+  Windows Job / POSIX process group cleanup、isolated Git environment の
+  共通境界。scanner/test の双方で同じ helper を使い、個別の直接実行へ
+  戻さない。Git child の環境は親の clone ではなく固定 allowlist から作り、
+  非Git名の credential / marker / loader / agent 変数も継承しない。
+  Windows は direct target を suspended で作成し、Job 割当後に
+  resume する。assign/resume failure は有限 wait まで cleanup を確認し、
+  正常終了した親の Job は stream drain より先に close する。close failure
+  では handle ownership を Stop/Dispose の再試行まで保持し、Job termination
+  fallback を失わない。cleanup は先頭例外で打ち切らず全stream/native
+  resourceを試行し、primary failureをaggregateへ保持する。native handleは
+  close成功後だけownershipを手放す。environment準備・launch・POSIX gate・
+  target pollは単一monotonic deadlineを共有し、Windows resume / POSIX
+  release直前にも同じclockを再確認する。有限cleanup猶予だけを別枠にする。
+  POSIX は child が `setsid` 後に direct launcher PID + launch nonce の
+  strict ASCII recordをatomic通知し、親がbyte-exact provenanceと
+  direct PID=PGIDを確認してから target を release する。
+  helper / bounded result / isolation setup-cleanup の
+  failure は固定 `integrity: process-boundary` + exit 2 だけを出す。
+- first-call AST gate は target function/alias shadow、scope/module-qualified
+  command、built-in alias、function-provider、保存/生成 ScriptBlock の
+  `.Invoke*()` / command sink、provider write、processBoundary 上書き、
+  class constructor/member/static initialization、expression/pipeline
+  indirection、dynamic Type/member、member名の大小文字差、runtime Type
+  receiver の `::new()`、`New-Object`を含むreflective activationを raw
+  binary fixture より前で拒否する。条件分岐内のvariable / alias state writeは
+  実行済みsafe overwriteとみなさずUnknownへ閉じる。不正値・runtime期限超過と、scan-wide残時間で
+  capされたGit child timeoutはreturned result / POSIX gate exceptionの
+  どちらも固定 `integrity: scan-deadline` + exit 2 だけを出す。Git固有15秒
+  timeoutと期限前startup failureの`process-boundary`分類は変更しない。
 
 ## 6. ブランチ・コミット・PR 規約
 
