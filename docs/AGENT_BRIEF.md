@@ -59,8 +59,9 @@ git diff --check
 
 CI（Validate workflow）は PR と `main` への push で同じ検査を実行する。
 Windows job は scanner self-test を PowerShell 7 と Windows PowerShell 5.1
-の両方で実行し、Ubuntu 24.04 job は POSIX process-group 経路を検証する。
-両 job は有限 timeout を持ち、checkout action は reviewed commit に固定する。
+の両方で実行し、Ubuntu 24.04 job は external `setsid` を含む POSIX
+process-group 経路、macOS job は native `setsid(2)` fallback を検証する。
+全 job は有限 timeout を持ち、checkout action は reviewed commit に固定する。
 workflow envelope は trigger / permission / job ID / active indentation を
 exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒否する。
 

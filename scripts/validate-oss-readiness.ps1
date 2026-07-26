@@ -3579,8 +3579,10 @@ jobs:
     name: Windows
   validate-ubuntu:
     name: Ubuntu
+  validate-macos:
+    name: macOS
 '@
-    $expectedJobs = @('validate', 'validate-ubuntu')
+    $expectedJobs = @('validate', 'validate-ubuntu', 'validate-macos')
     if (-not (Test-WorkflowEnvelopeSource `
         -Source $baseWorkflow `
         -ExpectedJobNames $expectedJobs)) {
@@ -4078,7 +4080,7 @@ Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Patte
 # 検証する。後続jobへ跨ぐregexによる誤合格を許さない。
 $workflowPath = '.github/workflows/validate.yml'
 $checkoutRevision = 'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09'
-$expectedWorkflowJobNames = @('validate', 'validate-ubuntu')
+$expectedWorkflowJobNames = @('validate', 'validate-ubuntu', 'validate-macos')
 Assert-WorkflowEnvelopeMutationRegressions
 Assert-WorkflowEnvelope `
     -RelativePath $workflowPath `
@@ -4144,6 +4146,38 @@ Assert-WorkflowStep -Steps $ubuntuSteps -JobName $ubuntuJobName `
     -Run './scripts/scan-private-markers.ps1'
 Assert-WorkflowStep -Steps $ubuntuSteps -JobName $ubuntuJobName `
     -Name 'Check whitespace on Ubuntu' -Shell 'pwsh' `
+    -Run './scripts/check-whitespace.ps1'
+
+# macOS jobは外部setsidが無いhostでnative setsid(2) fallbackを実行し、
+# Linuxだけでは見えないPOSIX process-group境界のportable contractを固定する。
+$macosJobName = 'validate-macos'
+$macosJobLines = @(Get-WorkflowJobLines `
+    -RelativePath $workflowPath `
+    -JobName $macosJobName)
+$macosSteps = @(Get-WorkflowSteps `
+    -Lines $macosJobLines `
+    -JobName $macosJobName)
+Assert-WorkflowJobValue -Lines $macosJobLines -JobName $macosJobName `
+    -Key 'runs-on' -ExpectedValue 'macos-latest'
+Assert-WorkflowJobValue -Lines $macosJobLines -JobName $macosJobName `
+    -Key 'timeout-minutes' -ExpectedValue '10'
+Assert-WorkflowStepCount -Steps $macosSteps -JobName $macosJobName `
+    -ExpectedCount 5
+Assert-WorkflowJobShape -Lines $macosJobLines -JobName $macosJobName `
+    -ExpectedStepCount 5 -ExpectedShellCount 4 -ExpectedRunCount 4
+Assert-WorkflowUsesStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Check out repository' -Uses $checkoutRevision
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Validate OSS readiness on macOS' -Shell 'pwsh' `
+    -Run './scripts/validate-oss-readiness.ps1'
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Test private marker scan (PowerShell 7 on macOS)' -Shell 'pwsh' `
+    -Run './scripts/test-scan-private-markers.ps1'
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Scan for private markers on macOS' -Shell 'pwsh' `
+    -Run './scripts/scan-private-markers.ps1'
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Check whitespace on macOS' -Shell 'pwsh' `
     -Run './scripts/check-whitespace.ps1'
 
 Test-SkillFrontmatter

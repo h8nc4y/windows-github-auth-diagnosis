@@ -170,9 +170,10 @@ git diff --check
 The GitHub Actions workflow runs the readiness check, scanner self-test,
 private-marker scan, and whitespace check on pull requests and pushes to
 `main`. Windows runs the scanner self-test under both PowerShell 7 and Windows
-PowerShell 5.1; a separate Ubuntu 24.04 job verifies the PowerShell 7 / POSIX
-process path. Both jobs have finite timeouts, and `actions/checkout` is pinned
-to a reviewed commit.
+PowerShell 5.1; Ubuntu 24.04 verifies the external `setsid` / POSIX path, and
+macOS verifies the native `setsid(2)` fallback used when no external `setsid`
+executable is available. All jobs have finite timeouts, and `actions/checkout`
+is pinned to a reviewed commit.
 
 The scanner uses `scripts/private-marker-process.ps1` as a bounded,
 binary-safe child-process boundary. It scans the union of regular stage-0

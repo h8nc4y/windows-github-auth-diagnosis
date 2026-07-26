@@ -1,6 +1,6 @@
 # TASKS_BACKLOG
 
-最終更新: 2026/07/27 JST（Codex: T-012 PR #26 merge・main 再検証済み）
+最終更新: 2026/07/27 JST（Codex: T-013 native macOS CI 実装・検証中）
 
 本ファイルがタスク台帳の正本。運用ルール・ゲート・検証手順は `docs/AGENT_BRIEF.md`、現在地サマリは `HANDOFF.md` を参照。着手時は `git status` / `git log` / `gh pr list` / `gh issue list` / `gh release list` の実状態を一次情報とする。
 
@@ -24,7 +24,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-010 | 上流 issue への skill 紹介コメント投稿 | 低 | **blocked・ゲート③** | 外部発信のため owner 承認まで着手しない。対象候補は openai/codex #21821 / #17459 等 |
 | T-011 | SKILL.md 明確化2点（transient retry / 環境変数 token 注記） | 中 | done | PR #18。2026-07-22 に最新 `main` との仮マージを両 PowerShell ランタイムで検証後に merge。main CI pass |
 | T-012 | private-marker scanner の hermetic / bounded process hardening | 高 | **done・Class M** | PR #26、merge commit `6ffb095`。PS5.1限定retry、POSIX PID+nonce provenance、primary/cleanup aggregation、resume/release直前を含むsingle deadline、native ownership、returned/throw両経路のscan-wide child timeout分類、conditional state dominance、case-insensitiveなdynamic Type/member/`::new()`/`New-Object` reflective activation拒否を統合。PR current-head / main push の Windows・Ubuntu CI と post-main cross-runtime 検証を通過 |
-| T-013 | native macOS process-group 検証の評価 | 中 | **todo・Class M** | macOS native 経路だけが未確認。`macos-latest` での PowerShell / process-group 前提を一次情報で確認し、free/public runner で bounded self-test を追加できるか評価する。workflow PR は通常 review / current-head CI 後に merge 可。tag / Release とは独立 |
+| T-013 | native macOS process-group 検証の評価 | 中 | **doing・Class M** | standard public `macos-latest` job と exact-envelope validatorを追加。validator-first RED→GREEN、Windows PowerShell 7 / 5.1 と Linux network-none / read-only の full suite は pass。native macOS は PR current-head CI まで `未確認`。paid/private larger runner、tag、Releaseとは独立 |
 
 ## 履歴（要約）
 

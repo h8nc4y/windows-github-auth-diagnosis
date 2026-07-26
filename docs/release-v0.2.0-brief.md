@@ -18,7 +18,11 @@ The release remains blocked until the owner confirms the version number, target 
 
 - Added Claude Code install instructions while preserving the existing Codex-style skill path.
 - Revised README Non-Goals so distribution is in scope, while credential storage and unsafe auth repair advice stay out of scope.
-- Updated GitHub Actions validation to `actions/checkout@v5` and documented why `windows-latest` remains unpinned for this repository.
+- Updated GitHub Actions validation to `actions/checkout@v5`, retained bounded
+  `windows-latest` / Ubuntu jobs, and added a bounded standard `macos-latest`
+  job for the native `setsid(2)` fallback. The moving labels remain
+  intentionally unpinned because this repository depends only on `pwsh`,
+  `git`, and native process primitives.
 - Hardened private-marker scanning with additional synthetic secret-prefix coverage and redaction checks.
 - Clarified the diagnosis procedure: retry a transiently failing proof command once before classifying, and recognize an environment-variable token source as a valid healthy state when the remaining proof checks pass.
 - Recorded advisory review disposition so resolved local advisory docs are not reintroduced as active implementation tasks.
