@@ -1,6 +1,6 @@
 # TASKS_BACKLOG
 
-最終更新: 2026/07/25 JST（Codex: T-012 PR #26 owner review 待ち）
+最終更新: 2026/07/27 JST（Codex: T-012 PR #26 fresh review 修正中）
 
 本ファイルがタスク台帳の正本。運用ルール・ゲート・検証手順は `docs/AGENT_BRIEF.md`、現在地サマリは `HANDOFF.md` を参照。着手時は `git status` / `git log` / `gh pr list` / `gh issue list` / `gh release list` の実状態を一次情報とする。
 
@@ -23,7 +23,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-009 | skills.sh（`npx skills add`）掲載の評価 | 低 | done（評価） | PR #15、`docs/skills-sh-channel-evaluation.md`。submit 不要・現構成のまま機能する見込み。残る判断は Release 後の README 導線追加のみ（別 PR） |
 | T-010 | 上流 issue への skill 紹介コメント投稿 | 低 | **blocked・ゲート③** | 外部発信のため owner 承認まで着手しない。対象候補は openai/codex #21821 / #17459 等 |
 | T-011 | SKILL.md 明確化2点（transient retry / 環境変数 token 注記） | 中 | done | PR #18。2026-07-22 に最新 `main` との仮マージを両 PowerShell ランタイムで検証後に merge。main CI pass |
-| T-012 | private-marker scanner の hermetic / bounded process hardening | 高 | **PR open・ゲート①・Class M** | PR #26。process/byte/redacted-diagnostic/AST-indirection/workflow-envelope の cross-runtime / security 検証と独立 review、commit、push は完了。workflow 変更 PR の merge は owner 承認待ち |
+| T-012 | private-marker scanner の hermetic / bounded process hardening | 高 | **PR open・Class M（review修正中）** | PR #26。fresh CI / reviewで検出したPS5.1限定retry、POSIX PID+nonce provenance、primary/cleanup aggregation、resume/release直前を含むsingle deadline、native ownership、returned/throw両経路のscan-wide child timeout分類、conditional state dominance、case-insensitiveなdynamic Type/member/`::new()`/`New-Object` reflective activationを修正済み。fresh freeze / push / CI / mergeは未実施 |
 
 ## 履歴（要約）
 
@@ -38,6 +38,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - 2026/07/22: T-011（PR #18）をレビュー・検証・merge。open PR 0件、open issue 0件、GitHub Release 0件を確認。
 - 2026/07/24: T-012 着手。`main` / `origin/main` `c664ecf`、open PR/issue 0件、Release 0件から branch を作成し、scanner process boundary と cross-runtime CI 回帰を統合中。
 - 2026/07/25: T-012 の独立 review 修正、cross-runtime 検証、commit / push、PR #26 作成まで完了。GitHub hosted Windows の PS5 cold start は test-only probe の上限だけ30秒へ調整し、production timeout は維持。workflow owner gate のため merge は未実施。
+- 2026/07/27: PR #26 のfresh CI / process-boundary reviewを再実施。Windows PS5.1のhealthy cold-startだけの1回retry、POSIX PID+nonce ready provenance、all-resource cleanup、primary failure保持、resume/release直前を含むsingle deadline、native ownership、returned/throw両経路のscan-wide child timeout分類、conditional state dominance、case-insensitiveなdynamic Type/member/`::new()`/`New-Object` reflective activation拒否を修正し、Windows両runtimeとLinux network-noneでself-testを再通過。
 
 ## 外部レビュー指摘の台帳（2026-07-15 maxエフォート横断レビュー）
 

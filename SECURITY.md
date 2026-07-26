@@ -52,8 +52,15 @@ plus a bounded process-table wait, and a normally exited parent has its Job
 closed before finite stream draining. Failed Job closure retains ownership for
 bounded Stop/Dispose retries and uses Job termination as a process-tree
 fallback; assigned-launch cleanup separately retains direct-process
-termination. On POSIX, the child reports its session-leader PID after `setsid`;
-the parent verifies that PID as the process-group ID before target release.
+termination. Cleanup attempts every stream and native resource, aggregates
+cleanup errors without masking the primary failure, and releases native-handle
+ownership only after a successful close. Environment preparation, launch,
+POSIX gating, and target polling share one monotonic deadline; finite cleanup
+grace remains separate. Windows resume and POSIX release recheck that same
+clock immediately before target execution. On POSIX, the child atomically reports a strict ASCII
+record containing its direct launcher PID and a launch nonce after `setsid`;
+the parent requires an exact record and verifies that same PID as the
+process-group ID before target release.
 Missing/failing helpers, unhealthy process results, and Git
 isolation setup/cleanup failures emit only the fixed, path-free
 `integrity: process-boundary` diagnostic with exit code 2. Non-Git fallback is
@@ -69,9 +76,19 @@ not detect every possible secret format and are no substitute for keeping
 real credentials out of the repository. Treat a passing scan as "no known
 marker found," not "definitely safe."
 
-Invalid scan-deadline values fail with the fixed, path-free
-`integrity: scan-deadline` diagnostic and exit code 2. Do not expose
-parameter-binding diagnostics or local paths when validating this boundary.
+Invalid or elapsed scan deadlines, including a Git child timeout capped by the
+scan-wide remaining budget, fail with the fixed, path-free
+`integrity: scan-deadline` diagnostic and exit code 2. The independent
+Git-specific timeout and helper failures observed before the scan-wide
+deadline remain process-boundary failures. This split also covers POSIX gate
+startup exceptions. Do not expose parameter-binding diagnostics or local
+paths when validating this boundary.
+
+The AST first-call boundary rejects runtime-Type `::new()` receivers and treats
+conditional variable or alias mutation as unknown state. A false branch cannot
+overwrite a tainted `New-Object` type or alias in the validator's source-order
+model; direct known-safe type expressions and straight-line writes remain the
+only accepted controls.
 
 ## Response Expectations
 

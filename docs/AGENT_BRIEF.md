@@ -81,16 +81,27 @@ exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒�
   resume する。assign/resume failure は有限 wait まで cleanup を確認し、
   正常終了した親の Job は stream drain より先に close する。close failure
   では handle ownership を Stop/Dispose の再試行まで保持し、Job termination
-  fallback を失わない。POSIX は child が `setsid` 後に session leader PID を
-  ready通知し、親が PID=PGID を確認してから target を release する。
+  fallback を失わない。cleanup は先頭例外で打ち切らず全stream/native
+  resourceを試行し、primary failureをaggregateへ保持する。native handleは
+  close成功後だけownershipを手放す。environment準備・launch・POSIX gate・
+  target pollは単一monotonic deadlineを共有し、Windows resume / POSIX
+  release直前にも同じclockを再確認する。有限cleanup猶予だけを別枠にする。
+  POSIX は child が `setsid` 後に direct launcher PID + launch nonce の
+  strict ASCII recordをatomic通知し、親がbyte-exact provenanceと
+  direct PID=PGIDを確認してから target を release する。
   helper / bounded result / isolation setup-cleanup の
   failure は固定 `integrity: process-boundary` + exit 2 だけを出す。
 - first-call AST gate は target function/alias shadow、scope/module-qualified
   command、built-in alias、function-provider、保存/生成 ScriptBlock の
   `.Invoke*()` / command sink、provider write、processBoundary 上書き、
   class constructor/member/static initialization、expression/pipeline
-  indirectionを raw binary fixture より前で拒否する。不正な scan deadline
-  は固定 `integrity: scan-deadline` + exit 2 だけを出す。
+  indirection、dynamic Type/member、member名の大小文字差、runtime Type
+  receiver の `::new()`、`New-Object`を含むreflective activationを raw
+  binary fixture より前で拒否する。条件分岐内のvariable / alias state writeは
+  実行済みsafe overwriteとみなさずUnknownへ閉じる。不正値・runtime期限超過と、scan-wide残時間で
+  capされたGit child timeoutはreturned result / POSIX gate exceptionの
+  どちらも固定 `integrity: scan-deadline` + exit 2 だけを出す。Git固有15秒
+  timeoutと期限前startup failureの`process-boundary`分類は変更しない。
 
 ## 6. ブランチ・コミット・PR 規約
 

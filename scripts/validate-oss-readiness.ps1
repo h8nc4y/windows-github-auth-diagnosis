@@ -132,6 +132,36 @@ function Test-PrivateMarkerProcessCommandIsDeferredDefinition {
     return Test-PrivateMarkerAstNodeIsDeferredDefinition -Node $Command
 }
 
+function Test-PrivateMarkerAstNodeIsDirectTopLevelStatement {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.Ast]$Node,
+
+        [Parameter(Mandatory = $true)]
+        [System.Management.Automation.Language.ScriptBlockAst]$SourceAst
+    )
+
+    # source-order stateは実行が保証されるtop-level statementだけから作る。
+    # if/loop/try等のStatementBlockやsubexpression内を「実行済み」と数えると、
+    # false branchのsafe overwriteで実際のtainted stateを隠せるため拒否する。
+    $current = $Node
+    while ($null -ne $current.Parent -and
+        $current.Parent -isnot
+            [System.Management.Automation.Language.NamedBlockAst]) {
+        if ($current.Parent -isnot
+                [System.Management.Automation.Language.PipelineAst] -and
+            $current.Parent -isnot
+                [System.Management.Automation.Language.CommandExpressionAst]) {
+            return $false
+        }
+        $current = $current.Parent
+    }
+    return $null -ne $current.Parent -and
+        $current.Parent -is
+            [System.Management.Automation.Language.NamedBlockAst] -and
+        [object]::ReferenceEquals($current.Parent.Parent, $SourceAst)
+}
+
 function ConvertTo-PrivateMarkerNormalizedCommandName {
     param([string]$Name)
 
@@ -1213,6 +1243,10 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
             Sort-Object { $_.Extent.StartOffset }
     )
     foreach ($stateEvent in $stateEventsBeforeBinary) {
+        $stateEventIsDirect =
+            Test-PrivateMarkerAstNodeIsDirectTopLevelStatement `
+                -Node $stateEvent `
+                -SourceAst $sourceAst
         $variableName = ''
         $valueNode = $null
         if ($stateEvent -is
@@ -1229,6 +1263,9 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
             # production bootstrapは既知のrepo-local helper解決を1回だけ許す。
             # 直接代入であっても別pathや再代入ならdot-source先を証明できない。
             if ($variableName -ieq 'processBoundary') {
+                if (-not $stateEventIsDirect) {
+                    return $false
+                }
                 $processBoundaryAssignmentCount++
                 if ($processBoundaryAssignmentCount -ne 1 -or
                     $stateEvent.Right.Extent.Text.Trim() -notmatch
@@ -1263,6 +1300,30 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
         }
         if ([string]::IsNullOrWhiteSpace($variableName)) {
             return $false
+        }
+
+        if (-not $stateEventIsDirect) {
+            # conditional/loop/try内は実行有無を確定できない。無関係なlocal
+            # bookkeepingまで全拒否せず、この変数だけをUnknownへ汚染して、
+            # 後続のTypeName/alias/provider/ScriptBlock利用時にfail closedにする。
+            $scriptBlockVariableStates[$variableName] = 'Unknown'
+            if ($staticStringVariableValues.ContainsKey($variableName)) {
+                $staticStringVariableValues.Remove($variableName)
+            }
+            if (-not $staticStringVariableHistory.ContainsKey($variableName)) {
+                $staticStringVariableHistory[$variableName] = @()
+            }
+            $staticStringVariableHistory[$variableName] = @(
+                $staticStringVariableHistory[$variableName]
+            ) + @(
+                [pscustomobject]@{
+                    Offset = [int]$stateEvent.Extent.StartOffset
+                    IsStatic = $false
+                    Value = ''
+                    IsFileSystemPath = $false
+                }
+            )
+            continue
         }
 
         $newState = Get-PrivateMarkerScriptBlockValueState `
@@ -1340,6 +1401,29 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
     foreach ($memberInvocation in $memberInvocationsBeforeBinary) {
         $memberName = Get-PrivateMarkerStaticMemberName `
             -Expression $memberInvocation
+        # dynamic member名はCreateInstance/Invoke等の既知危険memberへ
+        # 実行時解決できるため、pre-binaryでは名前不明の時点で拒否する。
+        if ([string]::IsNullOrWhiteSpace($memberName)) {
+            return $false
+        }
+        # CreateInstanceはType変数やType.GetType等のreceiverを介して
+        # Activatorへ解決できる。raw binary fixture前はreceiverを問わず
+        # reflective constructor起動を静的証明不能としてfail closedにする。
+        if ($memberName -ieq 'CreateInstance') {
+            return $false
+        }
+        if ($memberName -ieq 'new') {
+            # `::new()`はruntime Type variableやPSTypeName.Typeでも呼べる。
+            # raw fixture前はdirect TypeExpressionだけを既知receiverとして許可し、
+            # tainted classは下流のtype-reference guardでも重ねて拒否する。
+            if (-not $memberInvocation.Static -or
+                $memberInvocation.Expression -isnot
+                    [System.Management.Automation.Language.TypeExpressionAst] -or
+                $taintedTypeNames -icontains
+                    [string]$memberInvocation.Expression.TypeName.FullName) {
+                return $false
+            }
+        }
         if ($memberName -in @(
                 'Invoke',
                 'InvokeReturnAsIs',
@@ -1483,6 +1567,51 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
             # provider内のcopy/move/renameは既存Alias/Functionをtarget名へ
             # 複製・改名できる。filesystemだけと証明するより前は一律拒否する。
             return $false
+        }
+
+        # New-ObjectはTypeExpressionAstを残さずPowerShell class constructorを
+        # 実行できる。source-order aliasを解決したうえで、TypeName/position 0が
+        # 静的な既知非tainted型と証明できる場合だけpre-binary実行を許可する。
+        $resolvedNewObjectCommandName = $commandName
+        $newObjectAliasVisited = @{}
+        while ($aliases.ContainsKey($resolvedNewObjectCommandName)) {
+            if ($newObjectAliasVisited.ContainsKey(
+                    $resolvedNewObjectCommandName
+                )) {
+                return $false
+            }
+            $newObjectAliasVisited[$resolvedNewObjectCommandName] = $true
+            $resolvedNewObjectCommandName =
+                ConvertTo-PrivateMarkerNormalizedCommandName `
+                    -Name (
+                        [string]$aliases[$resolvedNewObjectCommandName]
+                    )
+            if ([string]::IsNullOrWhiteSpace(
+                    $resolvedNewObjectCommandName
+                )) {
+                return $false
+            }
+        }
+        if ($resolvedNewObjectCommandName -ieq 'New-Object') {
+            $newObjectTypeNameNode =
+                Get-PrivateMarkerCommandArgumentNode `
+                    -Command $command `
+                    -ParameterNames @('TypeName') `
+                    -Position 0
+            $resolvedNewObjectTypeName =
+                Resolve-PrivateMarkerStaticStringValueBeforeOffset `
+                    -Node $newObjectTypeNameNode `
+                    -VariableHistory $staticStringVariableHistory `
+                    -MaximumOffset $command.Extent.StartOffset
+            if (-not $resolvedNewObjectTypeName.IsStatic) {
+                return $false
+            }
+            $newObjectTypeName =
+                ([string]$resolvedNewObjectTypeName.Value).Trim()
+            if ([string]::IsNullOrWhiteSpace($newObjectTypeName) -or
+                $taintedTypeNames -icontains $newObjectTypeName) {
+                return $false
+            }
         }
 
         if ($commandName -ieq 'ForEach-Object') {
@@ -1629,6 +1758,12 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
                     $itemName -ieq 'Invoke-PrivateMarkerProcess') {
                     return $false
                 }
+                if (-not (Test-PrivateMarkerAstNodeIsDirectTopLevelStatement `
+                        -Node $command `
+                        -SourceAst $sourceAst)) {
+                    # nested provider writeは実行済みalias stateと証明できない。
+                    return $false
+                }
 
                 $providerValueNode =
                     Get-PrivateMarkerCommandArgumentNode `
@@ -1657,6 +1792,12 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
         }
 
         if ($commandName -iin @('Set-Alias', 'New-Alias')) {
+            if (-not (Test-PrivateMarkerAstNodeIsDirectTopLevelStatement `
+                    -Node $command `
+                    -SourceAst $sourceAst)) {
+                # conditional alias overwriteをsource-order stateへ反映しない。
+                return $false
+            }
             $aliasArguments =
                 Get-PrivateMarkerStaticCommandArguments -Command $command
             if (-not $aliasArguments.IsStatic -or
@@ -1703,6 +1844,278 @@ function Test-FirstTopLevelProcessInvocationIsBinarySource {
         }
     }
     return $true
+}
+
+function Test-ReflectiveActivationGuardContractSource {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source
+    )
+
+    # receiver型の直書きへ依存しないCreateInstance/::new guardに加え、
+    # New-Objectのsource-order TypeName/alias解決とtop-level dominanceを固定する。
+    $requiredPatterns = @(
+        '(?m)^[ \t]*if \(\[string\]::IsNullOrWhiteSpace\(\$memberName\)\) \{[ \t]*$',
+        '(?m)^[ \t]*if \(\$memberName -ieq ''CreateInstance''\) \{[ \t]*$',
+        '(?m)^[ \t]*if \(\$memberName -ieq ''new''\) \{[ \t]*$',
+        '(?s)if \(\$memberName -ieq ''new''\) \{.*?\$memberInvocation\.Expression -isnot\s+\[System\.Management\.Automation\.Language\.TypeExpressionAst\].*?\$taintedTypeNames -icontains\s+\[string\]\$memberInvocation\.Expression\.TypeName\.FullName',
+        "(?m)^[ \t]*Name = 'variable-reflective-class-constructor-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'get-type-reflective-class-constructor-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'lowercase-reflective-class-constructor-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'uppercase-reflective-class-constructor-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'mixed-case-reflective-class-constructor-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'dynamic-member-reflective-class-constructor-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'runtime-type-variable-new-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'pstype-type-property-new-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'get-type-new-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'direct-safe-type-new-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'known-static-member-before'[ \t]*$",
+        '(?s)function Test-PrivateMarkerAstNodeIsDirectTopLevelStatement \{.*?if \(\$current\.Parent -isnot\s+\[System\.Management\.Automation\.Language\.PipelineAst\] -and\s+\$current\.Parent -isnot\s+\[System\.Management\.Automation\.Language\.CommandExpressionAst\]\) \{\s+return \$false',
+        '(?s)foreach \(\$stateEvent in \$stateEventsBeforeBinary\) \{\s+\$stateEventIsDirect =.*?Test-PrivateMarkerAstNodeIsDirectTopLevelStatement.*?-Node \$stateEvent.*?-SourceAst \$sourceAst.*?\r?\n {8}if \(-not \$stateEventIsDirect\) \{.*?\$scriptBlockVariableStates\[\$variableName\] = ''Unknown''.*?IsStatic = \$false.*?IsFileSystemPath = \$false',
+        '(?s)if \(\$providerPath\.Value -match.*?if \(-not \(Test-PrivateMarkerAstNodeIsDirectTopLevelStatement.*?-Node \$command.*?-SourceAst \$sourceAst\)\).*?\$aliases\[\$itemName\] = \$aliasTarget',
+        '(?s)if \(\$commandName -iin @\(''Set-Alias'', ''New-Alias''\)\) \{\s+if \(-not \(Test-PrivateMarkerAstNodeIsDirectTopLevelStatement.*?-Node \$command.*?-SourceAst \$sourceAst\)\)',
+        '(?m)^[ \t]*while \(\$aliases\.ContainsKey\(\$resolvedNewObjectCommandName\)\) \{[ \t]*$',
+        '(?m)^[ \t]*if \(\$resolvedNewObjectCommandName -ieq ''New-Object''\) \{[ \t]*$',
+        '(?m)^[ \t]*if \(-not \$resolvedNewObjectTypeName\.IsStatic\) \{[ \t]*$',
+        '(?m)^[ \t]*\$taintedTypeNames -icontains \$newObjectTypeName\) \{[ \t]*$',
+        "(?m)^[ \t]*Name = 'new-object-named-tainted-class-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'new-object-positional-quoted-tainted-class-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'new-object-static-variable-tainted-class-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'new-object-dynamic-type-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'new-object-alias-tainted-class-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'new-object-known-safe-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'conditional-variable-safe-overwrite-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'conditional-set-variable-safe-overwrite-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'conditional-set-alias-safe-overwrite-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'conditional-new-alias-safe-overwrite-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'conditional-provider-alias-safe-overwrite-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'straight-line-variable-safe-overwrite-before'[ \t]*$",
+        "(?m)^[ \t]*Name = 'straight-line-alias-safe-overwrite-before'[ \t]*$"
+    )
+    foreach ($pattern in $requiredPatterns) {
+        if ([regex]::Matches($Source, $pattern).Count -ne 1) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Assert-ReflectiveActivationGuardContractRegressions {
+    $relativePath = 'scripts/validate-oss-readiness.ps1'
+    $filePath = Get-RepoFilePath -RelativePath $relativePath
+    $source = [System.IO.File]::ReadAllText($filePath)
+    if (-not (Test-ReflectiveActivationGuardContractSource `
+            -Source $source)) {
+        Add-Failure "$relativePath must reject pre-binary CreateInstance through dynamic Type receivers."
+        return
+    }
+
+    # guard本体または各bypass fixtureを一つずつ壊し、source contract自身が
+    # false-greenにならないことをin-memory mutationで確認する。
+    foreach ($mutation in @(
+        [pscustomobject]@{
+            Name = 'dynamic-member-name-guard'
+            Pattern = '(?m)^[ \t]*if \(\[string\]::IsNullOrWhiteSpace\(\$memberName\)\) \{[ \t]*$'
+            Replacement = '        if ($false) {'
+        },
+        [pscustomobject]@{
+            Name = 'create-instance-member-guard'
+            Pattern = "(?m)^[ \t]*if \(\`$memberName -ieq 'CreateInstance'\) \{[ \t]*$"
+            Replacement = "        if (`$memberName -ieq 'CreateInstanceDisabled') {"
+        },
+        [pscustomobject]@{
+            Name = 'create-instance-case-sensitivity'
+            Pattern = "(?m)^[ \t]*if \(\`$memberName -ieq 'CreateInstance'\) \{[ \t]*$"
+            Replacement = "        if (`$memberName -ceq 'CreateInstance') {"
+        },
+        [pscustomobject]@{
+            Name = 'new-member-case-sensitivity'
+            Pattern = "(?m)^[ \t]*if \(\`$memberName -ieq 'new'\) \{[ \t]*$"
+            Replacement = "        if (`$memberName -ceq 'new') {"
+        },
+        [pscustomobject]@{
+            Name = 'new-member-direct-type-receiver'
+            Pattern = '(?m)^[ \t]*\$memberInvocation\.Expression -isnot[ \t]*$'
+            Replacement = '                $memberInvocation.Expression -is'
+        },
+        [pscustomobject]@{
+            Name = 'type-variable-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'variable-reflective-class-constructor-before'[ \t]*$"
+            Replacement = "            Name = 'variable-reflective-class-constructor-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'type-get-type-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'get-type-reflective-class-constructor-before'[ \t]*$"
+            Replacement = "            Name = 'get-type-reflective-class-constructor-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'lowercase-member-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'lowercase-reflective-class-constructor-before'[ \t]*$"
+            Replacement = "            Name = 'lowercase-reflective-class-constructor-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'uppercase-member-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'uppercase-reflective-class-constructor-before'[ \t]*$"
+            Replacement = "            Name = 'uppercase-reflective-class-constructor-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'mixed-case-member-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'mixed-case-reflective-class-constructor-before'[ \t]*$"
+            Replacement = "            Name = 'mixed-case-reflective-class-constructor-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'dynamic-member-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'dynamic-member-reflective-class-constructor-before'[ \t]*$"
+            Replacement = "            Name = 'dynamic-member-reflective-class-constructor-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'runtime-type-new-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'runtime-type-variable-new-before'[ \t]*$"
+            Replacement = "            Name = 'runtime-type-variable-new-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'pstype-property-new-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'pstype-type-property-new-before'[ \t]*$"
+            Replacement = "            Name = 'pstype-type-property-new-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'get-type-new-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'get-type-new-before'[ \t]*$"
+            Replacement = "            Name = 'get-type-new-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'direct-safe-type-new-control'
+            Pattern = "(?m)^[ \t]*Name = 'direct-safe-type-new-before'[ \t]*$"
+            Replacement = "            Name = 'direct-safe-type-new-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'known-static-member-control'
+            Pattern = "(?m)^[ \t]*Name = 'known-static-member-before'[ \t]*$"
+            Replacement = "            Name = 'known-static-member-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-alias-resolution'
+            Pattern = '(?m)^[ \t]*while \(\$aliases\.ContainsKey\(\$resolvedNewObjectCommandName\)\) \{[ \t]*$'
+            Replacement = '        while ($false) {'
+        },
+        [pscustomobject]@{
+            Name = 'new-object-command-guard'
+            Pattern = "(?m)^[ \t]*if \(\`$resolvedNewObjectCommandName -ieq 'New-Object'\) \{[ \t]*$"
+            Replacement = "        if (`$resolvedNewObjectCommandName -ieq 'New-ObjectDisabled') {"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-static-type-guard'
+            Pattern = '(?m)^[ \t]*if \(-not \$resolvedNewObjectTypeName\.IsStatic\) \{[ \t]*$'
+            Replacement = '            if ($resolvedNewObjectTypeName.IsStatic) {'
+        },
+        [pscustomobject]@{
+            Name = 'new-object-tainted-type-guard'
+            Pattern = '(?m)^[ \t]*\$taintedTypeNames -icontains \$newObjectTypeName\) \{[ \t]*$'
+            Replacement = '                $taintedTypeNames -inotcontains $newObjectTypeName) {'
+        },
+        [pscustomobject]@{
+            Name = 'new-object-named-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'new-object-named-tainted-class-before'[ \t]*$"
+            Replacement = "            Name = 'new-object-named-tainted-class-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-positional-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'new-object-positional-quoted-tainted-class-before'[ \t]*$"
+            Replacement = "            Name = 'new-object-positional-quoted-tainted-class-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-static-variable-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'new-object-static-variable-tainted-class-before'[ \t]*$"
+            Replacement = "            Name = 'new-object-static-variable-tainted-class-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-dynamic-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'new-object-dynamic-type-before'[ \t]*$"
+            Replacement = "            Name = 'new-object-dynamic-type-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-alias-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'new-object-alias-tainted-class-before'[ \t]*$"
+            Replacement = "            Name = 'new-object-alias-tainted-class-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-safe-control'
+            Pattern = "(?m)^[ \t]*Name = 'new-object-known-safe-before'[ \t]*$"
+            Replacement = "            Name = 'new-object-known-safe-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'direct-top-level-state-guard'
+            Pattern = '(?m)^ {8}if \(-not \$stateEventIsDirect\) \{[ \t]*$'
+            Replacement = '        if ($false) {'
+        },
+        [pscustomobject]@{
+            Name = 'direct-top-level-parent-set'
+            Pattern = '(?m)^ {12}\$current\.Parent -isnot[ \t]*\r?\n {16}\[System\.Management\.Automation\.Language\.CommandExpressionAst\]\) \{[ \t]*$'
+            Replacement = '            $false) {'
+        },
+        [pscustomobject]@{
+            Name = 'conditional-provider-alias-guard'
+            Pattern = '(?s)(\$itemName -ieq ''Invoke-PrivateMarkerProcess''\) \{\s+return \$false\s+\}\s+)if \(-not \(Test-PrivateMarkerAstNodeIsDirectTopLevelStatement.*?-Node \$command.*?-SourceAst \$sourceAst\)\)'
+            Replacement = '$1if ($false)'
+        },
+        [pscustomobject]@{
+            Name = 'conditional-command-alias-guard'
+            Pattern = '(?s)(if \(\$commandName -iin @\(''Set-Alias'', ''New-Alias''\)\) \{\s+)if \(-not \(Test-PrivateMarkerAstNodeIsDirectTopLevelStatement.*?-Node \$command.*?-SourceAst \$sourceAst\)\)'
+            Replacement = '$1if ($false)'
+        },
+        [pscustomobject]@{
+            Name = 'conditional-variable-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'conditional-variable-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'conditional-variable-safe-overwrite-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'conditional-set-variable-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'conditional-set-variable-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'conditional-set-variable-safe-overwrite-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'conditional-set-alias-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'conditional-set-alias-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'conditional-set-alias-safe-overwrite-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'conditional-new-alias-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'conditional-new-alias-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'conditional-new-alias-safe-overwrite-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'conditional-provider-alias-fixture'
+            Pattern = "(?m)^[ \t]*Name = 'conditional-provider-alias-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'conditional-provider-alias-safe-overwrite-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'straight-line-variable-control'
+            Pattern = "(?m)^[ \t]*Name = 'straight-line-variable-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'straight-line-variable-safe-overwrite-before-disabled'"
+        },
+        [pscustomobject]@{
+            Name = 'straight-line-alias-control'
+            Pattern = "(?m)^[ \t]*Name = 'straight-line-alias-safe-overwrite-before'[ \t]*$"
+            Replacement = "            Name = 'straight-line-alias-safe-overwrite-before-disabled'"
+        }
+    )) {
+        if ([regex]::Matches(
+                $source,
+                [string]$mutation.Pattern
+            ).Count -ne 1) {
+            Add-Failure "Reflective activation mutation fixture is not unique: $($mutation.Name)."
+            continue
+        }
+        $mutatedSource = [regex]::Replace(
+            $source,
+            [string]$mutation.Pattern,
+            [string]$mutation.Replacement
+        )
+        if (Test-ReflectiveActivationGuardContractSource `
+                -Source $mutatedSource) {
+            Add-Failure "Reflective activation contract mutation was accepted: $($mutation.Name)."
+        }
+    }
 }
 
 function Assert-FirstTopLevelProcessInvocationValidatorRegressions {
@@ -2033,6 +2446,312 @@ $binaryAssignment
 "@
         },
         [pscustomobject]@{
+            Name = 'reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyReflectiveClass {
+    EarlyReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+[Activator]::CreateInstance(
+    ([System.Management.Automation.PSTypeName]'EarlyReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'qualified-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyQualifiedReflectiveClass {
+    EarlyQualifiedReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+[System.Activator]::CreateInstance(
+    ([System.Management.Automation.PSTypeName]'EarlyQualifiedReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'lowercase-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyLowercaseReflectiveClass {
+    EarlyLowercaseReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+[System.Activator]::createinstance(
+    ([System.Management.Automation.PSTypeName]'EarlyLowercaseReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'uppercase-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyUppercaseReflectiveClass {
+    EarlyUppercaseReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+[System.Activator]::CREATEINSTANCE(
+    ([System.Management.Automation.PSTypeName]'EarlyUppercaseReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'mixed-case-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyMixedCaseReflectiveClass {
+    EarlyMixedCaseReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+[System.Activator]::cReAtEiNsTaNcE(
+    ([System.Management.Automation.PSTypeName]'EarlyMixedCaseReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'variable-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyVariableReflectiveClass {
+    EarlyVariableReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+`$activatorType = [System.Activator]
+`$activatorType::CreateInstance(
+    ([System.Management.Automation.PSTypeName]'EarlyVariableReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'get-type-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyGetTypeReflectiveClass {
+    EarlyGetTypeReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+([type]::GetType('System.Activator'))::CreateInstance(
+    ([System.Management.Automation.PSTypeName]'EarlyGetTypeReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'dynamic-member-reflective-class-constructor-before'
+            Expected = $false
+            Source = @"
+class EarlyDynamicMemberReflectiveClass {
+    EarlyDynamicMemberReflectiveClass() { Invoke-PrivateMarkerProcess }
+}
+`$activatorType = [System.Activator]
+`$createMember = 'CreateInstance'
+`$activatorType::`$createMember(
+    ([System.Management.Automation.PSTypeName]'EarlyDynamicMemberReflectiveClass').Type
+)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'runtime-type-variable-new-before'
+            Expected = $false
+            Source = @"
+class EarlyRuntimeTypeNewClass {
+    EarlyRuntimeTypeNewClass() { Invoke-PrivateMarkerProcess }
+}
+`$runtimeType = [EarlyRuntimeTypeNewClass]
+`$runtimeType::new()
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'pstype-type-property-new-before'
+            Expected = $false
+            Source = @"
+class EarlyPSTypePropertyNewClass {
+    EarlyPSTypePropertyNewClass() { Invoke-PrivateMarkerProcess }
+}
+([System.Management.Automation.PSTypeName]'EarlyPSTypePropertyNewClass').Type::NEW()
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'get-type-new-before'
+            Expected = $false
+            Source = @"
+class EarlyGetTypeNewClass {
+    EarlyGetTypeNewClass() { Invoke-PrivateMarkerProcess }
+}
+`$earlyGetTypeName = (
+    [System.Management.Automation.PSTypeName]'EarlyGetTypeNewClass'
+).Type.AssemblyQualifiedName
+([type]::GetType(`$earlyGetTypeName))::NeW()
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'direct-safe-type-new-before'
+            Expected = $true
+            Source = "[System.Text.StringBuilder]::new()`n$binaryAssignment"
+        },
+        [pscustomobject]@{
+            Name = 'known-static-member-before'
+            Expected = $true
+            Source = "[Guid]::NewGuid()`n$binaryAssignment"
+        },
+        [pscustomobject]@{
+            Name = 'new-object-named-tainted-class-before'
+            Expected = $false
+            Source = @"
+class EarlyNamedNewObjectClass {
+    EarlyNamedNewObjectClass() { Invoke-PrivateMarkerProcess }
+}
+New-Object -TypeName EarlyNamedNewObjectClass
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'new-object-positional-quoted-tainted-class-before'
+            Expected = $false
+            Source = @"
+class EarlyPositionalNewObjectClass {
+    EarlyPositionalNewObjectClass() { Invoke-PrivateMarkerProcess }
+}
+New-Object 'EarlyPositionalNewObjectClass'
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'new-object-static-variable-tainted-class-before'
+            Expected = $false
+            Source = @"
+class EarlyVariableNewObjectClass {
+    EarlyVariableNewObjectClass() { Invoke-PrivateMarkerProcess }
+}
+`$newObjectType = 'EarlyVariableNewObjectClass'
+New-Object -TypeName `$newObjectType
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'new-object-dynamic-type-before'
+            Expected = $false
+            Source = @"
+class EarlyDynamicNewObjectClass {
+    EarlyDynamicNewObjectClass() { Invoke-PrivateMarkerProcess }
+}
+`$newObjectType = 'EarlyDynamicNewObjectClass'
+New-Object -TypeName (Get-Variable newObjectType -ValueOnly)
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'new-object-alias-tainted-class-before'
+            Expected = $false
+            Source = @"
+class EarlyAliasNewObjectClass {
+    EarlyAliasNewObjectClass() { Invoke-PrivateMarkerProcess }
+}
+Set-Alias MakeEarlyObject New-Object
+MakeEarlyObject -TypeName EarlyAliasNewObjectClass
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'new-object-known-safe-before'
+            Expected = $true
+            Source = "New-Object -TypeName System.Text.StringBuilder`n$binaryAssignment"
+        },
+        [pscustomobject]@{
+            Name = 'conditional-variable-safe-overwrite-before'
+            Expected = $false
+            Source = @"
+class EarlyConditionalVariableClass {
+    EarlyConditionalVariableClass() { Invoke-PrivateMarkerProcess }
+}
+`$conditionalType = 'EarlyConditionalVariableClass'
+if (`$false) { `$conditionalType = 'System.Text.StringBuilder' }
+New-Object -TypeName `$conditionalType
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'conditional-set-variable-safe-overwrite-before'
+            Expected = $false
+            Source = @"
+class EarlyConditionalSetVariableClass {
+    EarlyConditionalSetVariableClass() { Invoke-PrivateMarkerProcess }
+}
+`$conditionalSetType = 'EarlyConditionalSetVariableClass'
+if (`$false) {
+    Set-Variable conditionalSetType 'System.Text.StringBuilder'
+}
+New-Object -TypeName `$conditionalSetType
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'conditional-set-alias-safe-overwrite-before'
+            Expected = $false
+            Source = @"
+class EarlyConditionalSetAliasClass {
+    EarlyConditionalSetAliasClass() { Invoke-PrivateMarkerProcess }
+}
+Set-Alias MakeConditionalSetAliasObject New-Object
+if (`$false) { Set-Alias MakeConditionalSetAliasObject Get-Date }
+MakeConditionalSetAliasObject -TypeName EarlyConditionalSetAliasClass
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'conditional-new-alias-safe-overwrite-before'
+            Expected = $false
+            Source = @"
+class EarlyConditionalNewAliasClass {
+    EarlyConditionalNewAliasClass() { Invoke-PrivateMarkerProcess }
+}
+Set-Alias MakeConditionalNewAliasObject New-Object
+if (`$false) { New-Alias MakeConditionalNewAliasObject Get-Date }
+MakeConditionalNewAliasObject -TypeName EarlyConditionalNewAliasClass
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'conditional-provider-alias-safe-overwrite-before'
+            Expected = $false
+            Source = @"
+class EarlyConditionalProviderAliasClass {
+    EarlyConditionalProviderAliasClass() { Invoke-PrivateMarkerProcess }
+}
+Set-Alias MakeConditionalProviderAliasObject New-Object
+if (`$false) {
+    Set-Item Alias:MakeConditionalProviderAliasObject Get-Date
+}
+MakeConditionalProviderAliasObject -TypeName EarlyConditionalProviderAliasClass
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'straight-line-variable-safe-overwrite-before'
+            Expected = $true
+            Source = @"
+`$straightType = 'UnsafeLookingTypeName'
+`$straightType = 'System.Text.StringBuilder'
+New-Object -TypeName `$straightType
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
+            Name = 'straight-line-alias-safe-overwrite-before'
+            Expected = $true
+            Source = @"
+Set-Alias InvokeStraightLineAlias New-Object
+Set-Alias InvokeStraightLineAlias Get-Date
+InvokeStraightLineAlias
+$binaryAssignment
+"@
+        },
+        [pscustomobject]@{
             Name = 'class-member-before'
             Expected = $false
             Source = @"
@@ -2130,6 +2849,517 @@ function Assert-FirstTopLevelProcessInvocationIsBinary {
     if (-not (Test-FirstTopLevelProcessInvocationIsBinarySource `
         -Source $source)) {
         Add-Failure "$RelativePath must use the exact binary fixture for its first executable bounded-process invocation."
+    }
+}
+
+function Test-HermeticEnvironmentProbeRetryContractSource {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source
+    )
+
+    # test-only retryの意味をASTとexact source contractで固定する。単に
+    # helper名が残るだけで、budget・回数・healthy predicateが緩む変更を通さない。
+    $tokens = $null
+    $parseErrors = $null
+    $sourceAst = [System.Management.Automation.Language.Parser]::ParseInput(
+        $Source,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+    if ($parseErrors.Count -gt 0) {
+        return $false
+    }
+
+    $retryFunctions = @(
+        $sourceAst.FindAll(
+            {
+                param($node)
+                return $node -is
+                        [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $node.Name -ceq
+                        'Test-HermeticEnvironmentProbeRetryableTimeout'
+            },
+            $true
+        )
+    )
+    if ($retryFunctions.Count -ne 1) {
+        return $false
+    }
+
+    # Windows PowerShell 5.1限定guardと順序付きのhealthy AND列をexactに
+    # 要求し、他runtimeへの拡張やsignal緩和をreadinessで拒否する。
+    $predicatePattern = (
+        '(?s)return\s+\(Test-PrivateMarkerWindowsHost\)\s+-and\s+' +
+        '\$PSVersionTable\.PSVersion\.Major\s+-eq\s+5\s+-and\s+' +
+        '\$PSVersionTable\.PSVersion\.Minor\s+-eq\s+1\s+-and\s+' +
+        '\$Result\.TimedOut\s+-and\s+' +
+        '\$Result\.ExitCode\s+-eq\s+0\s+-and\s+' +
+        '\$Result\.StandardOutputBytes\.Length\s+-eq\s+0\s+-and\s+' +
+        '\$Result\.StandardErrorBytes\.Length\s+-eq\s+0\s+-and\s+' +
+        '-not\s+\$Result\.OutputLimitExceeded\s+-and\s+' +
+        '-not\s+\$Result\.InputWriteFailed\s+-and\s+' +
+        '-not\s+\$Result\.PipeLeakDetected\s+-and\s+' +
+        '\$Result\.ContainmentEstablished\s+-and\s+' +
+        '\$Result\.StreamsCompleted\s+-and\s+' +
+        '\$Result\.TreeStopped'
+    )
+    if ([regex]::Matches(
+            $retryFunctions[0].Extent.Text,
+            $predicatePattern
+        ).Count -ne 1) {
+        return $false
+    }
+
+    $exactPatterns = @(
+        '(?m)^[ \t]*\$hermeticEnvironmentProbeTimeoutMilliseconds[ \t]*=[ \t]*30000[ \t]*$',
+        '(?m)^[ \t]*\$hermeticEnvironmentProbeMaximumAttempts[ \t]*=[ \t]*2[ \t]*$',
+        '(?s)\$hermeticEnvironmentAttempt[ \t]*=[ \t]*1[ \t]*;.*?\$hermeticEnvironmentAttempt[ \t]*-le\s+\$hermeticEnvironmentProbeMaximumAttempts[ \t]*;.*?\$hermeticEnvironmentAttempt\+\+',
+        '(?s)\$hermeticEnvironmentAttempt[ \t]*-lt\s+\$hermeticEnvironmentProbeMaximumAttempts\s+-and\s+\(Test-HermeticEnvironmentProbeRetryableTimeout\s+`?\s*-Result\s+\$hermeticEnvironmentResult\)',
+        '(?s)-IsolationRoot\s+\$hermeticEnvironmentIsolationRoot.*?-TimeoutMilliseconds\s+`?\s*\$hermeticEnvironmentProbeTimeoutMilliseconds',
+        '"hermetic-child-environment-\$hermeticEnvironmentAttempt"',
+        '(?s)\$isWindowsPowerShell51\s*=\s+\(Test-PrivateMarkerWindowsHost\)\s+-and\s+\$PSVersionTable\.PSVersion\.Major\s+-eq\s+5\s+-and\s+\$PSVersionTable\.PSVersion\.Minor\s+-eq\s+1',
+        '(?s)\$healthyHermeticTimeoutIsRetryable\s*=\s+Test-HermeticEnvironmentProbeRetryableTimeout\s+`?\s*-Result\s+\$healthyHermeticTimeoutFixture'
+    )
+    foreach ($pattern in $exactPatterns) {
+        if ([regex]::Matches($Source, $pattern).Count -ne 1) {
+            return $false
+        }
+    }
+
+    $retryCalls = @(
+        $sourceAst.FindAll(
+            {
+                param($node)
+                return $node -is
+                        [System.Management.Automation.Language.CommandAst] -and
+                    $node.GetCommandName() -ceq
+                        'Test-HermeticEnvironmentProbeRetryableTimeout'
+            },
+            $true
+        )
+    )
+    return $retryCalls.Count -eq 2
+}
+
+function Assert-HermeticEnvironmentProbeRetryContractRegressions {
+    param(
+        [string]$RelativePath
+    )
+
+    $filePath = Get-RepoFilePath -RelativePath $RelativePath
+    if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+        Add-Failure "Cannot inspect missing file: $RelativePath (hermetic retry contract)"
+        return
+    }
+    $source = [System.IO.File]::ReadAllText($filePath)
+    if (-not (Test-HermeticEnvironmentProbeRetryContractSource `
+            -Source $source)) {
+        Add-Failure "$RelativePath must keep the exact bounded healthy-timeout retry contract."
+        return
+    }
+
+    # checker自身のfalse-greenを防ぐため、固定値・各predicate・wiringを一つずつ
+    # 壊したsourceが全て拒否されることをin-memory mutationで検証する。
+    $mutations = @(
+        [pscustomobject]@{
+            Name = 'timeout-budget'
+            Old = '$hermeticEnvironmentProbeTimeoutMilliseconds = 30000'
+            New = '$hermeticEnvironmentProbeTimeoutMilliseconds = 30001'
+        },
+        [pscustomobject]@{
+            Name = 'maximum-attempts'
+            Old = '$hermeticEnvironmentProbeMaximumAttempts = 2'
+            New = '$hermeticEnvironmentProbeMaximumAttempts = 3'
+        },
+        [pscustomobject]@{
+            Name = 'windows-runtime-guard'
+            Old = '(Test-PrivateMarkerWindowsHost) -and'
+            New = '$true -and'
+        },
+        [pscustomobject]@{
+            Name = 'major-runtime-guard'
+            Old = '$PSVersionTable.PSVersion.Major -eq 5 -and'
+            New = '$PSVersionTable.PSVersion.Major -ge 5 -and'
+        },
+        [pscustomobject]@{
+            Name = 'minor-runtime-guard'
+            Old = '$PSVersionTable.PSVersion.Minor -eq 1 -and'
+            New = '$PSVersionTable.PSVersion.Minor -ge 0 -and'
+        },
+        [pscustomobject]@{
+            Name = 'timed-out-predicate'
+            Old = '$Result.TimedOut -and'
+            New = '$Result.TimedOut -or'
+        },
+        [pscustomobject]@{
+            Name = 'exit-code-predicate'
+            Old = '$Result.ExitCode -eq 0 -and'
+            New = '$Result.ExitCode -ne 0 -and'
+        },
+        [pscustomobject]@{
+            Name = 'stdout-predicate'
+            Old = '$Result.StandardOutputBytes.Length -eq 0 -and'
+            New = '$Result.StandardOutputBytes.Length -ge 0 -and'
+        },
+        [pscustomobject]@{
+            Name = 'stderr-predicate'
+            Old = '$Result.StandardErrorBytes.Length -eq 0 -and'
+            New = '$Result.StandardErrorBytes.Length -ge 0 -and'
+        },
+        [pscustomobject]@{
+            Name = 'output-limit-predicate'
+            Old = '-not $Result.OutputLimitExceeded -and'
+            New = '$Result.OutputLimitExceeded -and'
+        },
+        [pscustomobject]@{
+            Name = 'input-write-predicate'
+            Old = '-not $Result.InputWriteFailed -and'
+            New = '$Result.InputWriteFailed -and'
+        },
+        [pscustomobject]@{
+            Name = 'pipe-leak-predicate'
+            Old = '-not $Result.PipeLeakDetected -and'
+            New = '$Result.PipeLeakDetected -and'
+        },
+        [pscustomobject]@{
+            Name = 'containment-predicate'
+            Old = '$Result.ContainmentEstablished -and'
+            New = '-not $Result.ContainmentEstablished -and'
+        },
+        [pscustomobject]@{
+            Name = 'streams-predicate'
+            Old = '$Result.StreamsCompleted -and'
+            New = '-not $Result.StreamsCompleted -and'
+        },
+        [pscustomobject]@{
+            Name = 'tree-stop-predicate'
+            Old = '$Result.TreeStopped'
+            New = '-not $Result.TreeStopped'
+        },
+        [pscustomobject]@{
+            Name = 'retry-comparison'
+            Old = '$hermeticEnvironmentAttempt -lt'
+            New = '$hermeticEnvironmentAttempt -le'
+        },
+        [pscustomobject]@{
+            Name = 'retry-helper-call'
+            Old = '(Test-HermeticEnvironmentProbeRetryableTimeout `'
+            New = '(Test-HermeticEnvironmentProbeRetryableTimeoutDisabled `'
+        },
+        [pscustomobject]@{
+            Name = 'fresh-isolation-root'
+            Old = '"hermetic-child-environment-$hermeticEnvironmentAttempt"'
+            New = "'hermetic-child-environment'"
+        }
+    )
+    $retryFunctionMutationNames = @(
+        'windows-runtime-guard',
+        'major-runtime-guard',
+        'minor-runtime-guard',
+        'timed-out-predicate',
+        'exit-code-predicate',
+        'stdout-predicate',
+        'stderr-predicate',
+        'output-limit-predicate',
+        'input-write-predicate',
+        'pipe-leak-predicate',
+        'containment-predicate',
+        'streams-predicate',
+        'tree-stop-predicate'
+    )
+    $mutationTokens = $null
+    $mutationParseErrors = $null
+    $mutationAst = [System.Management.Automation.Language.Parser]::ParseInput(
+        $source,
+        [ref]$mutationTokens,
+        [ref]$mutationParseErrors
+    )
+    $retryFunctionForMutation = @(
+        $mutationAst.FindAll(
+            {
+                param($node)
+                return $node -is
+                        [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $node.Name -ceq
+                        'Test-HermeticEnvironmentProbeRetryableTimeout'
+            },
+            $true
+        )
+    )[0]
+    foreach ($mutation in $mutations) {
+        $scopeStartOffset = 0
+        $scopeEndOffset = $source.Length
+        if ($mutation.Name -in $retryFunctionMutationNames) {
+            $scopeStartOffset =
+                $retryFunctionForMutation.Extent.StartOffset
+            $scopeEndOffset =
+                $retryFunctionForMutation.Extent.EndOffset
+        }
+        $mutationScope = $source.Substring(
+            $scopeStartOffset,
+            $scopeEndOffset - $scopeStartOffset
+        )
+        $matchCount = (
+            [regex]::Matches(
+                $mutationScope,
+                [regex]::Escape([string]$mutation.Old)
+            )
+        ).Count
+        if ($matchCount -ne 1) {
+            Add-Failure "Hermetic retry mutation fixture is not unique: $($mutation.Name)."
+            continue
+        }
+        $mutatedScope = $mutationScope.Replace(
+            [string]$mutation.Old,
+            [string]$mutation.New
+        )
+        $mutatedSource =
+            $source.Substring(0, $scopeStartOffset) +
+            $mutatedScope +
+            $source.Substring($scopeEndOffset)
+        if (Test-HermeticEnvironmentProbeRetryContractSource `
+                -Source $mutatedSource) {
+            Add-Failure "Hermetic retry contract mutation was accepted: $($mutation.Name)."
+        }
+    }
+}
+
+function Test-ProcessBoundaryHardeningContractSource {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source
+    )
+
+    # POSIX provenance、single deadline、all-resource cleanup、native ownershipを
+    # 一つのsource contractとして固定し、部分的な差戻しをfalse-greenにしない。
+    $requiredPatterns = @(
+        '(?s)private static void CloseOwnedHandle\(ref IntPtr handle\).*?if \(!CloseHandle\(handle\)\).*?throw new Win32Exception\(.*?handle = IntPtr\.Zero;',
+        '(?s)public void Dispose\(\).*?CaptureCleanupFailure\(\s*\(\) => CloseJob\(\).*?CaptureCleanupFailure\(\s*\(\) => StandardInput\.Dispose\(\).*?CaptureCleanupFailure\(\s*\(\) => StandardOutput\.Dispose\(\).*?CaptureCleanupFailure\(\s*\(\) => StandardError\.Dispose\(\).*?CaptureOwnedHandleClose\(\s*ref processHandle.*?if \(cleanupFailure != null\)',
+        '(?s)catch \(Exception launchFailure\).*?primaryFailure = new AggregateException\(\s*"Contained child launch cleanup failed\.",\s*launchFailure,\s*cleanupFailure\).*?primaryFailure = launchFailure;.*?finally.*?Exception finalCleanupFailure = null;.*?if \(primaryFailure != null\).*?primaryFailure,\s*finalCleanupFailure',
+        '(?s)\$clock = \[System\.Diagnostics\.Stopwatch\]::StartNew\(\)\s+\$process = \$null.*?\$processStarted = \$false.*?try \{',
+        '(?s)\[ValidateSet\('''', ''forged-pid'', ''forged-nonce'', ''bom'', ''partial'', ''delay'', ''release-delay''\)\].*?\$ForcePosixGateFailure = ''''',
+        '(?s)\$readyRecordNonce = if \(\$readyFailure -ceq ''forged-nonce''\).*?\$replacementPrefix \+ \$readyNonce\.Substring\(1\).*?\) \+ '':'' \+ \$readyRecordNonce',
+        '(?s)\$expectedReadyRecord = \(.*?\$process\.Id\.ToString\(.*?\) \+ '':'' \+ \$gateNonce',
+        '(?s)\[IO\.File\]::WriteAllBytes\(\$readyTempPath, \$readyBytes\)\s+\[IO\.File\]::Move\(\$readyTempPath, \$readyPath\).*?\[System\.IO\.File\]::ReadAllBytes\(.*?Test-PrivateMarkerByteArraysEqual.*?\$readyProcessId -eq \$process\.Id.*?IsProcessGroupLeader',
+        '(?s)while \(\$clock\.ElapsedMilliseconds -lt\s+\$TimeoutMilliseconds\).*?\[Math\]::Min\(5, \[int\]\$remainingGateMilliseconds\)',
+        '(?s)public static ContainedProcess Start\(.*?Stopwatch deadlineClock,\s+long deadlineMilliseconds\).*?if \(deadlineClock\.ElapsedMilliseconds < deadlineMilliseconds\).*?ResumeThread\(processInformation\.Thread\)',
+        '(?s)\[PrivateMarker\.ContainedProcess\]::Start\(.*?\$ForceWindowsLaunchFailure,\s+\$clock,\s+\$TimeoutMilliseconds\s+\)',
+        '(?s)if \(\$ForceWindowsLaunchFailure -ceq ''resume-close''\).*?\$syntheticAggregate\.Flatten\(\)\.InnerExceptions.*?\$syntheticMessages\[0\] -ceq \$resumePrimaryMessage.*?\$syntheticMessages\[1\] -ceq\s+\$assignedJobCleanupMessage.*?\$resumePrimaryMessage \+ '' '' \+\s+\$assignedJobCleanupMessage',
+        '(?s)if \(\$ForcePosixGateFailure -ceq ''release-delay''\).*?if \(\$clock\.ElapsedMilliseconds -ge \$TimeoutMilliseconds\).*?\$timedOut = \$true.*?else \{.*?\[System\.IO\.File\]::WriteAllText\(\s+\$posixGateReleasePath',
+        '(?s)\$remainingProcessMilliseconds =\s+\$TimeoutMilliseconds - \$clock\.ElapsedMilliseconds.*?\[Math\]::Min\(100, \[int\]\$remainingProcessMilliseconds\).*?WaitForExit\(\s*\$processWaitMilliseconds',
+        '(?s)catch \{\s*# finallyのcleanup失敗で元例外を置換しない.*?\$primaryProcessFailure = \$_\.Exception\s*\}\s*finally.*?\$cleanupFailures\.Add\(\$_\.Exception\).*?Bounded process execution or cleanup failed'
+    )
+    foreach ($pattern in $requiredPatterns) {
+        if ([regex]::Matches($Source, $pattern).Count -ne 1) {
+            return $false
+        }
+    }
+
+    # fixed 100ms waitや旧2000回pollが復活するとcaller deadlineへ
+    # 暗黙の追加猶予を足すため、negative contractでも明示的に拒否する。
+    if ($Source -match 'WaitForExit\(\s*100\s*\)' -or
+        $Source -match '\$gateAttempt\s+-lt\s+2000') {
+        return $false
+    }
+    return [regex]::Matches(
+        $Source,
+        '\$clock = \[System\.Diagnostics\.Stopwatch\]::StartNew\(\)'
+    ).Count -eq 1
+}
+
+function Assert-ProcessBoundaryHardeningContractRegressions {
+    param(
+        [string]$RelativePath
+    )
+
+    $filePath = Get-RepoFilePath -RelativePath $RelativePath
+    if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+        Add-Failure "Cannot inspect missing file: $RelativePath (process boundary hardening)"
+        return
+    }
+    $source = [System.IO.File]::ReadAllText($filePath)
+    if (-not (Test-ProcessBoundaryHardeningContractSource -Source $source)) {
+        Add-Failure "$RelativePath must preserve the exact process-boundary provenance, deadline, cleanup, and ownership contract."
+        return
+    }
+
+    # security-sensitiveな各結合点を一つずつ壊し、checker自身が全mutationを
+    # 拒否することを確認する。各needleはproduction source内で一意に保つ。
+    $mutations = @(
+        [pscustomobject]@{
+            Name = 'windows-release-deadline'
+            Old = 'if (deadlineClock.ElapsedMilliseconds < deadlineMilliseconds)'
+            New = 'if (true)'
+        },
+        [pscustomobject]@{
+            Name = 'windows-same-clock'
+            Old = '$clock,'
+            New = '$null,'
+        },
+        [pscustomobject]@{
+            Name = 'posix-release-deadline'
+            Old = 'if ($clock.ElapsedMilliseconds -ge $TimeoutMilliseconds) {'
+            New = 'if ($false) {'
+        },
+        [pscustomobject]@{
+            Name = 'ready-direct-pid-binding'
+            Old = '$readyProcessId -eq $process.Id'
+            New = '$readyProcessId -gt 0'
+        },
+        [pscustomobject]@{
+            Name = 'ready-parent-nonce-binding'
+            Old = ") + ':' + `$gateNonce"
+            New = ") + ':' + ('0' * `$gateNonce.Length)"
+        },
+        [pscustomobject]@{
+            Name = 'ready-wrapper-nonce-binding'
+            Old = ") + ':' + `$readyRecordNonce"
+            New = ") + ':' + `$readyNonce"
+        },
+        [pscustomobject]@{
+            Name = 'ready-raw-byte-read'
+            Old = '[System.IO.File]::ReadAllBytes('
+            New = '[System.IO.File]::ReadAllText('
+        },
+        [pscustomobject]@{
+            Name = 'ready-atomic-move'
+            Old = '[IO.File]::Move($readyTempPath, $readyPath)'
+            New = '# atomic move removed'
+        },
+        [pscustomobject]@{
+            Name = 'single-clock-origin'
+            Old = '$clock = [System.Diagnostics.Stopwatch]::StartNew()'
+            New = '$clock = $null'
+        },
+        [pscustomobject]@{
+            Name = 'remaining-wait-cap'
+            Old = '[Math]::Min(100, [int]$remainingProcessMilliseconds)'
+            New = '100'
+        },
+        [pscustomobject]@{
+            Name = 'native-close-result'
+            Old = 'if (!CloseHandle(handle))'
+            New = 'if (false)'
+        },
+        [pscustomobject]@{
+            Name = 'all-stream-cleanup'
+            Old = '() => StandardOutput.Dispose()'
+            New = '() => StandardInput.Dispose()'
+        },
+        [pscustomobject]@{
+            Name = 'primary-failure-retention'
+            Old = '$primaryProcessFailure = $_.Exception'
+            New = '$primaryProcessFailure = $null'
+        },
+        [pscustomobject]@{
+            Name = 'launch-primary-failure-retention'
+            Old = 'launchFailure,'
+            New = 'cleanupFailure,'
+        },
+        [pscustomobject]@{
+            Name = 'launch-wrapper-primary-order'
+            Old = '$syntheticMessages[0] -ceq $resumePrimaryMessage'
+            New = '$syntheticMessages[1] -ceq $resumePrimaryMessage'
+        },
+        [pscustomobject]@{
+            Name = 'posix-negative-seams'
+            Old = "'forged-pid', 'forged-nonce', 'bom', 'partial', 'delay'"
+            New = "'delay'"
+        }
+    )
+    foreach ($mutation in $mutations) {
+        $matchCount = (
+            [regex]::Matches(
+                $source,
+                [regex]::Escape([string]$mutation.Old)
+            )
+        ).Count
+        if ($matchCount -ne 1) {
+            Add-Failure "Process-boundary mutation fixture is not unique: $($mutation.Name)."
+            continue
+        }
+        $mutatedSource = $source.Replace(
+            [string]$mutation.Old,
+            [string]$mutation.New
+        )
+        if (Test-ProcessBoundaryHardeningContractSource `
+                -Source $mutatedSource) {
+            Add-Failure "Process-boundary contract mutation was accepted: $($mutation.Name)."
+        }
+    }
+}
+
+function Test-GitTimeoutClassificationContractSource {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Source
+    )
+
+    # child timeoutの支配境界をinvocation前に確定し、scan-wide残時間で
+    # capしたtimeoutだけをscan-deadlineへ分類する。Git固有timeoutは
+    # 従来どおりAssert-HealthyGitBoundaryのprocess-boundaryへ残す。
+    $requiredPatterns = @(
+        '(?s)function Get-RemainingGitTimeoutMilliseconds.*?TimeoutMilliseconds\s*=\s+\[Math\]::Min\(\$GitCommandTimeoutMilliseconds, \$remaining\).*?IsScanDeadlineBound\s*=\s+\$remaining -le \$GitCommandTimeoutMilliseconds',
+        '(?s)function Invoke-ScannerGit.*?\$gitTimeoutBudget = Get-RemainingGitTimeoutMilliseconds.*?-TimeoutMilliseconds \$gitTimeoutBudget\.TimeoutMilliseconds.*?catch \{.*?if \(\$gitTimeoutBudget\.IsScanDeadlineBound\) \{\s+Assert-PrivateMarkerScanDeadline\s+\}.*?Stop-PrivateMarkerIntegrityFailure -Reason ''process-boundary''.*?if \(\$result\.TimedOut -and \$gitTimeoutBudget\.IsScanDeadlineBound\) \{.*?Stop-PrivateMarkerIntegrityFailure -Reason ''scan-deadline''',
+        '(?s)function Assert-HealthyGitBoundary.*?if \(\$Result\.TimedOut -or.*?Stop-PrivateMarkerIntegrityFailure -Reason ''process-boundary'''
+    )
+    foreach ($pattern in $requiredPatterns) {
+        if ([regex]::Matches($Source, $pattern).Count -ne 1) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Assert-GitTimeoutClassificationContractRegressions {
+    param([string]$RelativePath)
+
+    $filePath = Get-RepoFilePath -RelativePath $RelativePath
+    $source = [System.IO.File]::ReadAllText($filePath)
+    if (-not (Test-GitTimeoutClassificationContractSource `
+            -Source $source)) {
+        Add-Failure "$RelativePath must distinguish scan-wide and Git-specific child timeouts."
+        return
+    }
+
+    foreach ($mutation in @(
+        [pscustomobject]@{
+            Name = 'exception-deadline-routing'
+            Old = 'if ($gitTimeoutBudget.IsScanDeadlineBound) {'
+            New = 'if ($false) {'
+        },
+        [pscustomobject]@{
+            Name = 'deadline-equality'
+            Old = '$remaining -le $GitCommandTimeoutMilliseconds'
+            New = '$remaining -lt $GitCommandTimeoutMilliseconds'
+        },
+        [pscustomobject]@{
+            Name = 'deadline-bound-routing'
+            Old = '$result.TimedOut -and $gitTimeoutBudget.IsScanDeadlineBound'
+            New = '$result.TimedOut -and $false'
+        },
+        [pscustomobject]@{
+            Name = 'effective-timeout-wiring'
+            Old = '-TimeoutMilliseconds $gitTimeoutBudget.TimeoutMilliseconds'
+            New = '-TimeoutMilliseconds $GitCommandTimeoutMilliseconds'
+        }
+    )) {
+        if ([regex]::Matches(
+                $source,
+                [regex]::Escape([string]$mutation.Old)
+            ).Count -ne 1) {
+            Add-Failure "Git timeout classification mutation fixture is not unique: $($mutation.Name)."
+            continue
+        }
+        $mutatedSource = $source.Replace(
+            [string]$mutation.Old,
+            [string]$mutation.New
+        )
+        if (Test-GitTimeoutClassificationContractSource `
+                -Source $mutatedSource) {
+            Add-Failure "Git timeout classification mutation was accepted: $($mutation.Name)."
+        }
     }
 }
 
@@ -2802,15 +4032,35 @@ Assert-FileContains -RelativePath 'scripts/check-whitespace.ps1' -Pattern '4b825
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'Assert-PrivateMarkerScanDeadline' -Description 'scan-wide deadline enforcement'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern '(?s)\[object\]\$ScanDeadlineMilliseconds\s*=\s*120000' -Description 'fixed-diagnostic scan-wide deadline input seam'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern "Stop-PrivateMarkerIntegrityFailure\s+-Reason\s+'scan-deadline'" -Description 'fixed exit-2 invalid scan deadline boundary'
+Assert-GitTimeoutClassificationContractRegressions `
+    -RelativePath 'scripts/scan-private-markers.ps1'
 Assert-FinalScanDeadlineContract -RelativePath 'scripts/scan-private-markers.ps1'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'maximumFindingOutputBytes' -Description 'actual UTF-8 finding output cap'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'private-marker-process\.ps1' -Description 'shared bounded process boundary in scanner self-test'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'PosixSignal.*IsSuccessfulResult' -Description 'POSIX errno cleanup regression coverage'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern '\[byte\[\]\]\$binaryProbeBytes\s*=\s*@\(0x00,\s*0x80,\s*0xFF\)' -Description 'exact binary standard-stream fixture'
+Assert-ReflectiveActivationGuardContractRegressions
 Assert-FirstTopLevelProcessInvocationValidatorRegressions
 Assert-FirstTopLevelProcessInvocationIsBinary `
     -RelativePath 'scripts/test-scan-private-markers.ps1'
-Assert-FileContains -RelativePath 'scripts/private-marker-process.ps1' -Pattern '\[ValidateSet\('''',\s*''assign'',\s*''resume'',\s*''resume-close'',\s*''close''\)\]\s*\[string\]\$ForceWindowsLaunchFailure' -Description 'Windows suspended-launch and Job-close failure seam'
+Assert-HermeticEnvironmentProbeRetryContractRegressions `
+    -RelativePath 'scripts/test-scan-private-markers.ps1'
+Assert-ProcessBoundaryHardeningContractRegressions `
+    -RelativePath 'scripts/private-marker-process.ps1'
+Assert-FileContains `
+    -RelativePath 'scripts/scan-private-markers.ps1' `
+    -Pattern '(?s)\[int\]\$GitCommandTimeoutMilliseconds\s*=\s*15000' `
+    -Description 'unchanged production Git process timeout'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected ContainedProcess cleanup to attempt every stream and aggregate multiple Dispose failures' -Description 'all-resource cleanup regression'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected failed native handle close to preserve ownership for a later retry' -Description 'native handle ownership retry regression'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected POSIX .* ready record to fail closed before target release' -Description 'POSIX forged and malformed ready record regressions'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected resume-close aggregate to retain the synthetic resume primary failure alongside cleanup failure' -Description 'Windows launch primary failure aggregation regression'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected POSIX session-gate startup to consume the caller monotonic timeout' -Description 'POSIX gate deadline regression'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected Windows target release to remain blocked after the caller deadline' -Description 'Windows pre-resume deadline sentinel'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected POSIX target release to remain blocked after the caller deadline' -Description 'POSIX pre-release deadline sentinel'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected a scan-wide-bounded Git timeout to use the scan-deadline contract' -Description 'scan-wide child timeout classification regression'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected a scan-wide POSIX gate timeout exception to use scan-deadline without releasing the Git target' -Description 'scan-wide POSIX gate exception classification sentinel'
+Assert-FileContains -RelativePath 'scripts/private-marker-process.ps1' -Pattern '\[ValidateSet\('''',\s*''assign'',\s*''resume'',\s*''resume-close'',\s*''close'',\s*''deadline''\)\]\s*\[string\]\$ForceWindowsLaunchFailure' -Description 'Windows suspended-launch, deadline, and Job-close failure seam'
 Assert-FileContains -RelativePath 'scripts/private-marker-process.ps1' -Pattern 'LastSyntheticFailureProcessId' -Description 'synthetic launch PID evidence'
 Assert-FileContains -RelativePath 'scripts/private-marker-process.ps1' -Pattern 'Contained child launch cleanup failed' -Description 'launch and cleanup failure aggregation'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected \$launchFailureMode launch failure to remove its PID without resuming the suspended target' -Description 'assign/resume cleanup regression'

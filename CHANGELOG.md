@@ -41,22 +41,45 @@ The format follows Keep a Changelog conventions.
   A failed Job close retains handle ownership through Stop/Dispose retries,
   terminates the Job as a fallback, and launch cleanup still directly
   terminates the suspended process when its assigned Job cannot be closed.
+  Cleanup now attempts every stream and native resource, retains the primary
+  failure in an aggregate, and clears native-handle ownership only after a
+  successful close.
 - Close the POSIX pre-session race by making both external `setsid` and the
-  native fallback report the session-leader PID through a ready gate; verify
-  `PID == PGID` before releasing the target, and keep external invocation to
-  the option-free operand form shared by BusyBox and util-linux.
+  native fallback atomically report a strict ASCII direct-PID/launch-nonce
+  record through a ready gate; require byte-exact provenance and verify the
+  direct `PID == PGID` before releasing the target. Keep external invocation
+  to the option-free operand form shared by BusyBox and util-linux.
+- Apply one monotonic target deadline to environment preparation, launch,
+  POSIX gating, and process polling. Fixed poll intervals are capped to the
+  remaining budget, and Windows resume / POSIX release recheck that same clock
+  immediately before target execution. Finite process-tree and stream cleanup
+  grace stays separate.
 - Exercise the forced native POSIX session gate with a byte-exact Unicode
   argument fixture, and self-test the AST first-call validator against
   deferred scriptblocks, nested calls, `.Invoke*()` execution,
   scope/module-qualified wrappers, target shadows, built-in aliases,
   `Get-Command` and function-provider references, class constructor/member
-  execution and static initialization, stored/generated ScriptBlock
+  execution, static initialization, reflective activation through direct,
+  dynamic-Type, dynamic-member, case-variant, runtime-Type `::new()`, and
+  `New-Object` forms. Source-order variable and alias state now treats
+  conditional writes as unknown instead of executed safe overwrites,
+  stored/generated ScriptBlock
   `.Invoke*()` and command-sink data flow, provider mutation, bootstrap
-  variable replacement, expression/pipeline invocation, and dynamic calls
-  that cannot be proven safe.
+  variable replacement, expression/pipeline invocation, and other dynamic
+  calls that cannot be proven safe.
 - Validate scan-deadline input inside the scanner so invalid types or
   out-of-range values use one path-free `integrity: scan-deadline` diagnostic
-  and exit code 2 instead of host-specific parameter-binding output.
+  and exit code 2 instead of host-specific parameter-binding output. Runtime
+  expiry and Git child timeouts bounded by the scan-wide remaining budget use
+  the same fixed diagnostic whether the helper returns a timeout result or a
+  POSIX gate-startup exception. The unchanged Git-specific 15-second timeout
+  and startup failures before the scan deadline remain process-boundary
+  failures.
+- Retry the Windows PowerShell 5.1 hermetic environment probe once only when
+  the first attempt is a fully contained, output-free timeout with no other
+  failure signal. PowerShell 7 and POSIX hosts never retry. Its test-only
+  30-second budget and the production 15-second Git timeout remain
+  independently locked by readiness mutations.
 - Collapse missing/failing process helpers, unhealthy bounded children, and
   Git isolation creation/cleanup failures into one fixed, path-free
   `integrity: process-boundary` diagnostic with exit code 2.

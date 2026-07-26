@@ -289,6 +289,55 @@ function Test-FixedIntegrityFailureResult {
     return $true
 }
 
+function Test-HermeticEnvironmentProbeRetryableTimeout {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Result
+    )
+
+    # hosted Windows PowerShell 5.1のcold startだけを再試行対象にする。
+    # PS7/Linux/macOSでは同じhealthy timeoutでも初回結果をそのまま返し、
+    # production timeoutや別runtimeのfailureをtest-only retryで覆わない。
+    return (Test-PrivateMarkerWindowsHost) -and
+        $PSVersionTable.PSVersion.Major -eq 5 -and
+        $PSVersionTable.PSVersion.Minor -eq 1 -and
+        $Result.TimedOut -and
+        $Result.ExitCode -eq 0 -and
+        $Result.StandardOutputBytes.Length -eq 0 -and
+        $Result.StandardErrorBytes.Length -eq 0 -and
+        -not $Result.OutputLimitExceeded -and
+        -not $Result.InputWriteFailed -and
+        -not $Result.PipeLeakDetected -and
+        $Result.ContainmentEstablished -and
+        $Result.StreamsCompleted -and
+        $Result.TreeStopped
+}
+
+# retry helper単体でも、healthy timeoutがWindows PowerShell 5.1以外では
+# 必ず拒否されることを実測する。production Git timeoutとは共有しない。
+$healthyHermeticTimeoutFixture = [pscustomobject]@{
+    TimedOut = $true
+    ExitCode = 0
+    StandardOutputBytes = [byte[]]@()
+    StandardErrorBytes = [byte[]]@()
+    OutputLimitExceeded = $false
+    InputWriteFailed = $false
+    PipeLeakDetected = $false
+    ContainmentEstablished = $true
+    StreamsCompleted = $true
+    TreeStopped = $true
+}
+$isWindowsPowerShell51 =
+    (Test-PrivateMarkerWindowsHost) -and
+    $PSVersionTable.PSVersion.Major -eq 5 -and
+    $PSVersionTable.PSVersion.Minor -eq 1
+$healthyHermeticTimeoutIsRetryable =
+    Test-HermeticEnvironmentProbeRetryableTimeout `
+        -Result $healthyHermeticTimeoutFixture
+if ($healthyHermeticTimeoutIsRetryable -ne $isWindowsPowerShell51) {
+    Add-Failure 'Expected hermetic environment retry eligibility only on Windows PowerShell 5.1.'
+}
+
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("windows-github-auth-diagnosis-scan-test-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 $emptyCommandPath = Join-Path $tempRoot 'empty-command-path'
@@ -397,8 +446,6 @@ finally {
 
     # sanitized Git childはGIT_*だけでなく、非Git名のcredential・marker・
     # loader変数と明示overrideも捨て、固定した最小環境だけを受け取る。
-    $hermeticEnvironmentIsolationRoot =
-        Join-Path $tempRoot 'hermetic-child-environment'
     $hermeticEnvironmentProbe = @'
 $ErrorActionPreference = 'Stop'
 $forbiddenNames = @(
@@ -460,31 +507,57 @@ if ($failedNames.Count -gt 0) {
         '-EncodedCommand',
         $hermeticEnvironmentEncoded
     )
-    $beforeHermeticEnvironmentProbe = Get-ProcessEnvironmentSnapshot
-    # hosted WindowsのPS5.1 cold startは固定環境で10秒を超えることがある。
-    # production Git timeoutは変えず、この環境観測probeだけを有限30秒にする。
-    $hermeticEnvironmentResult = Invoke-PrivateMarkerProcess `
-        -FileName $currentPowerShellExecutable `
-        -Arguments $hermeticEnvironmentArguments `
-        -WorkingDirectory $tempRoot `
-        -EnvironmentOverrides @{
-            PRIVATE_MARKER_AMBIENT_SECRET_PROBE = 'synthetic-secret'
-            WINDOWS_GITHUB_AUTH_DIAGNOSIS_PRIVATE_MARKERS = 'synthetic-marker'
-            AWS_ACCESS_KEY_ID = 'synthetic-credential'
-            GH_TOKEN = 'synthetic-credential'
-            SSH_AUTH_SOCK = 'synthetic-agent'
-            LD_PRELOAD = 'synthetic-loader'
-            GIT_PRIVATE_MARKER_AMBIENT_PROBE = 'synthetic-git-value'
-            PATH = 'PRIVATE_MARKER_AMBIENT_PATH_PROBE'
-        } `
-        -SanitizeGitEnvironment `
-        -IsolationRoot $hermeticEnvironmentIsolationRoot `
-        -MaximumStandardOutputBytes 128 `
-        -MaximumStandardErrorBytes 4096 `
-        -TimeoutMilliseconds 30000
-    Assert-ProcessEnvironmentUnchanged `
-        -Expected $beforeHermeticEnvironmentProbe `
-        -Context 'Hermetic Git child probe'
+    # hosted WindowsのPS5.1 cold startは、processを一度も実行できないまま
+    # 30秒へ達することがある。production Git timeoutは変えず、outputなし・
+    # 境界内完全停止のhealthy timeoutだけをfresh isolationで1回再試行する。
+    $hermeticEnvironmentProbeTimeoutMilliseconds = 30000
+    $hermeticEnvironmentProbeMaximumAttempts = 2
+    $hermeticEnvironmentAttemptCount = 0
+    $hermeticEnvironmentResult = $null
+    for (
+        $hermeticEnvironmentAttempt = 1;
+        $hermeticEnvironmentAttempt -le
+            $hermeticEnvironmentProbeMaximumAttempts;
+        $hermeticEnvironmentAttempt++
+    ) {
+        $hermeticEnvironmentAttemptCount = $hermeticEnvironmentAttempt
+        $hermeticEnvironmentIsolationRoot = Join-Path `
+            $tempRoot `
+            "hermetic-child-environment-$hermeticEnvironmentAttempt"
+        $beforeHermeticEnvironmentProbe = Get-ProcessEnvironmentSnapshot
+        $hermeticEnvironmentResult = Invoke-PrivateMarkerProcess `
+            -FileName $currentPowerShellExecutable `
+            -Arguments $hermeticEnvironmentArguments `
+            -WorkingDirectory $tempRoot `
+            -EnvironmentOverrides @{
+                PRIVATE_MARKER_AMBIENT_SECRET_PROBE = 'synthetic-secret'
+                WINDOWS_GITHUB_AUTH_DIAGNOSIS_PRIVATE_MARKERS = 'synthetic-marker'
+                AWS_ACCESS_KEY_ID = 'synthetic-credential'
+                GH_TOKEN = 'synthetic-credential'
+                SSH_AUTH_SOCK = 'synthetic-agent'
+                LD_PRELOAD = 'synthetic-loader'
+                GIT_PRIVATE_MARKER_AMBIENT_PROBE = 'synthetic-git-value'
+                PATH = 'PRIVATE_MARKER_AMBIENT_PATH_PROBE'
+            } `
+            -SanitizeGitEnvironment `
+            -IsolationRoot $hermeticEnvironmentIsolationRoot `
+            -MaximumStandardOutputBytes 128 `
+            -MaximumStandardErrorBytes 4096 `
+            -TimeoutMilliseconds `
+                $hermeticEnvironmentProbeTimeoutMilliseconds
+        Assert-ProcessEnvironmentUnchanged `
+            -Expected $beforeHermeticEnvironmentProbe `
+            -Context 'Hermetic Git child probe'
+
+        $shouldRetryHermeticEnvironmentProbe =
+            $hermeticEnvironmentAttempt -lt
+                $hermeticEnvironmentProbeMaximumAttempts -and
+            (Test-HermeticEnvironmentProbeRetryableTimeout `
+                -Result $hermeticEnvironmentResult)
+        if (-not $shouldRetryHermeticEnvironmentProbe) {
+            break
+        }
+    }
     $hermeticEnvironmentExpected =
         [Text.Encoding]::UTF8.GetBytes('hermetic-environment-pass')
     if ($hermeticEnvironmentResult.ExitCode -ne 0 -or
@@ -504,6 +577,7 @@ if ($failedNames.Count -gt 0) {
             'probe-variable-check-failed'
         } else {
             "exit=$($hermeticEnvironmentResult.ExitCode)," +
+                "attempts=$hermeticEnvironmentAttemptCount," +
                 "stdout-bytes=$($hermeticEnvironmentResult.StandardOutputBytes.Length)," +
                 "stderr-bytes=$($hermeticEnvironmentResult.StandardErrorBytes.Length)," +
                 "timed-out=$($hermeticEnvironmentResult.TimedOut)," +
@@ -551,6 +625,7 @@ if ($failedNames.Count -gt 0) {
             $launchFailureStopwatch =
                 [Diagnostics.Stopwatch]::StartNew()
             $launchFailureObserved = $false
+            $launchFailureException = $null
             try {
                 [void](Invoke-PrivateMarkerProcess `
                     -FileName $currentPowerShellExecutable `
@@ -562,6 +637,7 @@ if ($failedNames.Count -gt 0) {
             catch {
                 # 例外本文にはローカルpathが入り得るため、公開可能な判定だけを保持する。
                 $launchFailureObserved = $true
+                $launchFailureException = $_.Exception
             }
             $launchFailureStopwatch.Stop()
 
@@ -592,6 +668,77 @@ if ($failedNames.Count -gt 0) {
                 (Test-Path -LiteralPath $launchFailureSentinel)) {
                 Add-Failure "Expected $launchFailureMode launch failure to remove its PID without resuming the suspended target."
             }
+
+            if ($launchFailureMode -ceq 'resume-close') {
+                # public PowerShell境界はC# AggregateExceptionを固定messageへ包む。
+                # source contractでinner順を固定し、runtimeではprimary/cleanupの
+                # 両sentinelが外側診断まで失われないことを独立に確認する。
+                $launchFailureMessage = [string]$launchFailureException.Message
+                $resumePrimaryMessage = 'Synthetic ResumeThread failure.'
+                $assignedJobCleanupMessage =
+                    'Synthetic assigned Job close failure.'
+                $resumePrimaryIndex =
+                    $launchFailureMessage.IndexOf(
+                        $resumePrimaryMessage,
+                        [StringComparison]::Ordinal
+                    )
+                $assignedJobCleanupIndex =
+                    $launchFailureMessage.IndexOf(
+                        $assignedJobCleanupMessage,
+                        [StringComparison]::Ordinal
+                    )
+                if ([regex]::Matches(
+                        $launchFailureMessage,
+                        [regex]::Escape($resumePrimaryMessage)
+                    ).Count -ne 1 -or
+                    [regex]::Matches(
+                        $launchFailureMessage,
+                        [regex]::Escape($assignedJobCleanupMessage)
+                    ).Count -ne 1 -or
+                    $resumePrimaryIndex -lt 0 -or
+                    $assignedJobCleanupIndex -le $resumePrimaryIndex) {
+                    Add-Failure 'Expected resume-close aggregate to retain the synthetic resume primary failure alongside cleanup failure.'
+                }
+            }
+        }
+
+        # environment/CreateProcess/Job assign中にcaller期限を跨いだ場合も、
+        # resume直前の同一clock確認でtargetを一度も実行せず回収する。
+        $windowsExpiredReleaseSentinel =
+            Join-Path $tempRoot 'windows-expired-release-ran.txt'
+        $escapedWindowsExpiredReleaseSentinel =
+            $windowsExpiredReleaseSentinel.Replace("'", "''")
+        $windowsExpiredReleaseScript = @"
+[IO.File]::WriteAllText('$escapedWindowsExpiredReleaseSentinel', 'ran')
+"@
+        $windowsExpiredReleaseEncoded = [Convert]::ToBase64String(
+            [Text.Encoding]::Unicode.GetBytes(
+                $windowsExpiredReleaseScript
+            )
+        )
+        $windowsExpiredReleaseArguments = @('-NoProfile')
+        if ($PSVersionTable.PSVersion.Major -le 5) {
+            $windowsExpiredReleaseArguments += @(
+                '-ExecutionPolicy',
+                'Bypass'
+            )
+        }
+        $windowsExpiredReleaseArguments += @(
+            '-EncodedCommand',
+            $windowsExpiredReleaseEncoded
+        )
+        $windowsExpiredReleaseResult = Invoke-PrivateMarkerProcess `
+            -FileName $currentPowerShellExecutable `
+            -Arguments $windowsExpiredReleaseArguments `
+            -WorkingDirectory $tempRoot `
+            -TimeoutMilliseconds 25 `
+            -ForceWindowsLaunchFailure 'deadline'
+        Start-Sleep -Milliseconds 100
+        if (-not $windowsExpiredReleaseResult.TimedOut -or
+            -not $windowsExpiredReleaseResult.ContainmentEstablished -or
+            -not $windowsExpiredReleaseResult.TreeStopped -or
+            (Test-Path -LiteralPath $windowsExpiredReleaseSentinel)) {
+            Add-Failure 'Expected Windows target release to remain blocked after the caller deadline.'
         }
 
         # 正常launch後のJob closeを2回synthetic failureにし、main cleanupから
@@ -677,6 +824,114 @@ exit 77
             -not $jobCloseProcessGone -or
             $jobCloseStopwatch.ElapsedMilliseconds -ge 6000) {
             Add-Failure 'Expected repeated Job close failures to retain the handle through Stop/Dispose and contain every child.'
+        }
+
+        # cleanupの先頭streamがDispose失敗しても、残るstreamとnative handleを
+        # 必ず試行する。reflection fixtureはproduction ContainedProcess.Dispose
+        # 自体を通し、先頭例外で後続cleanupをskipする回帰をREDに固定する。
+        if ($null -eq ('PrivateMarker.Testing.DisposeProbeStream' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+
+namespace PrivateMarker.Testing
+{
+    public sealed class DisposeProbeStream : MemoryStream
+    {
+        private readonly int slot;
+        private readonly bool fail;
+        public static readonly int[] Calls = new int[3];
+
+        public DisposeProbeStream(int slot, bool fail)
+        {
+            this.slot = slot;
+            this.fail = fail;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            Calls[slot]++;
+            if (fail)
+            {
+                throw new InvalidOperationException(
+                    "Synthetic stream cleanup failure.");
+            }
+            base.Dispose(disposing);
+        }
+    }
+}
+'@
+        }
+        for ($probeIndex = 0; $probeIndex -lt 3; $probeIndex++) {
+            [PrivateMarker.Testing.DisposeProbeStream]::Calls[$probeIndex] = 0
+        }
+        $containedConstructor = @(
+            [PrivateMarker.ContainedProcess].GetConstructors(
+                [System.Reflection.BindingFlags]'Instance,NonPublic'
+            ) | Where-Object {
+                $_.GetParameters().Count -eq 7
+            }
+        )[0]
+        $disposeProbeStreams = @(
+            [PrivateMarker.Testing.DisposeProbeStream]::new(0, $true),
+            [PrivateMarker.Testing.DisposeProbeStream]::new(1, $true),
+            [PrivateMarker.Testing.DisposeProbeStream]::new(2, $false)
+        )
+        $disposeProbeProcess = $containedConstructor.Invoke(
+            [object[]]@(
+                [IntPtr]::Zero,
+                $disposeProbeStreams[0],
+                $disposeProbeStreams[1],
+                $disposeProbeStreams[2],
+                [IntPtr]::Zero,
+                $false,
+                0
+            )
+        )
+        $disposeProbeFailureObserved = $false
+        try {
+            $disposeProbeProcess.Dispose()
+        }
+        catch {
+            $disposeProbeFailureObserved = $true
+        }
+        if (-not $disposeProbeFailureObserved -or
+            [PrivateMarker.Testing.DisposeProbeStream]::Calls[0] -ne 1 -or
+            [PrivateMarker.Testing.DisposeProbeStream]::Calls[1] -ne 1 -or
+            [PrivateMarker.Testing.DisposeProbeStream]::Calls[2] -ne 1) {
+            Add-Failure 'Expected ContainedProcess cleanup to attempt every stream and aggregate multiple Dispose failures.'
+        }
+
+        # native handleはCloseHandle成功後だけownershipを0へ移す。失敗時に
+        # ownershipを失うとDispose/finalizerが再試行できないため、invalid
+        # synthetic handleで例外とref値保持を同時に検証する。
+        $closeOwnedHandleMethod = [PrivateMarker.ContainedProcess].GetMethod(
+            'CloseOwnedHandle',
+            [System.Reflection.BindingFlags]'Static,NonPublic'
+        )
+        # 実在handleを一度closeしたstale値なら、偶然有効な数値を選ばず
+        # CloseHandle失敗を決定的に作れる。再割当を挟まず直ちにprobeする。
+        $closedHandleFixture = [System.Threading.EventWaitHandle]::new(
+            $false,
+            [System.Threading.EventResetMode]::ManualReset
+        )
+        $invalidOwnedHandle =
+            $closedHandleFixture.SafeWaitHandle.DangerousGetHandle()
+        $closedHandleFixture.Dispose()
+        $closeOwnedArguments = [object[]]@($invalidOwnedHandle)
+        $closeOwnedFailureObserved = $false
+        try {
+            [void]$closeOwnedHandleMethod.Invoke(
+                $null,
+                $closeOwnedArguments
+            )
+        }
+        catch {
+            $closeOwnedFailureObserved = $true
+        }
+        if (-not $closeOwnedFailureObserved -or
+            [IntPtr]$closeOwnedArguments[0] -ne $invalidOwnedHandle) {
+            Add-Failure 'Expected failed native handle close to preserve ownership for a later retry.'
         }
     }
 
@@ -1325,6 +1580,134 @@ finally {
             [PrivateMarker.PosixSignal]::IsSuccessfulResult(-1, 13)) {
             Add-Failure 'Expected POSIX cleanup to accept success/ESRCH and reject EPERM/EACCES.'
         }
+
+        # ready recordはdirect launcher PIDとlaunch nonceへexactにbindする。
+        # forged PID、same-length forged nonce、UTF-8 BOM、partial recordは
+        # いずれもtargetをreleaseせず、bounded cleanup後に固定failureへ閉じる。
+        foreach ($readyFailureMode in @(
+            'forged-pid',
+            'forged-nonce',
+            'bom',
+            'partial'
+        )) {
+            $invalidReadySentinel = Join-Path `
+                $tempRoot `
+                "posix-invalid-ready-$readyFailureMode-ran.txt"
+            $escapedInvalidReadySentinel =
+                $invalidReadySentinel.Replace("'", "''")
+            $invalidReadyScript = @"
+[IO.File]::WriteAllText('$escapedInvalidReadySentinel', 'ran')
+"@
+            $invalidReadyEncoded = [Convert]::ToBase64String(
+                [Text.Encoding]::Unicode.GetBytes($invalidReadyScript)
+            )
+            $invalidReadyFailure = $null
+            $invalidReadyStopwatch = [Diagnostics.Stopwatch]::StartNew()
+            try {
+                [void](Invoke-PrivateMarkerProcess `
+                    -FileName $currentPowerShellExecutable `
+                    -Arguments @(
+                        '-NoProfile',
+                        '-EncodedCommand',
+                        $invalidReadyEncoded
+                    ) `
+                    -WorkingDirectory $tempRoot `
+                    -IsolationRoot (
+                        Join-Path `
+                            $tempRoot `
+                            "posix-invalid-ready-$readyFailureMode-isolation"
+                    ) `
+                    -TimeoutMilliseconds 1000 `
+                    -ForcePosixGateFailure $readyFailureMode)
+            }
+            catch {
+                $invalidReadyFailure = $_.Exception
+            }
+            $invalidReadyStopwatch.Stop()
+            if ($null -eq $invalidReadyFailure -or
+                $invalidReadyFailure.Message -notmatch
+                    'Failed to establish the bounded POSIX session gate' -or
+                $invalidReadyStopwatch.ElapsedMilliseconds -ge 2000 -or
+                (Test-Path -LiteralPath $invalidReadySentinel)) {
+                Add-Failure "Expected POSIX $readyFailureMode ready record to fail closed before target release."
+            }
+        }
+
+        # session gateの待機もcaller timeoutを消費する。readyを遅延する
+        # synthetic seamで、旧固定10秒pollへ戻らず短いdeadlineで停止する。
+        $delayedReadySentinel =
+            Join-Path $tempRoot 'posix-delayed-ready-ran.txt'
+        $escapedDelayedReadySentinel =
+            $delayedReadySentinel.Replace("'", "''")
+        $delayedReadyScript = @"
+[IO.File]::WriteAllText('$escapedDelayedReadySentinel', 'ran')
+"@
+        $delayedReadyEncoded = [Convert]::ToBase64String(
+            [Text.Encoding]::Unicode.GetBytes($delayedReadyScript)
+        )
+        $delayedReadyFailure = $null
+        $delayedReadyStopwatch = [Diagnostics.Stopwatch]::StartNew()
+        try {
+            [void](Invoke-PrivateMarkerProcess `
+                -FileName $currentPowerShellExecutable `
+                -Arguments @(
+                    '-NoProfile',
+                    '-EncodedCommand',
+                    $delayedReadyEncoded
+                ) `
+                -WorkingDirectory $tempRoot `
+                -IsolationRoot (
+                    Join-Path $tempRoot 'posix-delayed-ready-isolation'
+                ) `
+                -TimeoutMilliseconds 50 `
+                -ForcePosixGateFailure 'delay')
+        }
+        catch {
+            $delayedReadyFailure = $_.Exception
+        }
+        $delayedReadyStopwatch.Stop()
+        if ($null -eq $delayedReadyFailure -or
+            $delayedReadyFailure.Message -notmatch
+                'Failed to establish the bounded POSIX session gate' -or
+            $delayedReadyStopwatch.ElapsedMilliseconds -ge 1500 -or
+            (Test-Path -LiteralPath $delayedReadySentinel)) {
+            Add-Failure 'Expected POSIX session-gate startup to consume the caller monotonic timeout.'
+        }
+
+        # ready recordとPGIDが正しくても、release直前に同じcaller期限を
+        # 再確認する。test-only delayで期限を跨がせ、target未実行を固定する。
+        $posixExpiredReleaseSentinel =
+            Join-Path $tempRoot 'posix-expired-release-ran.txt'
+        $escapedPosixExpiredReleaseSentinel =
+            $posixExpiredReleaseSentinel.Replace("'", "''")
+        $posixExpiredReleaseScript = @"
+[IO.File]::WriteAllText('$escapedPosixExpiredReleaseSentinel', 'ran')
+"@
+        $posixExpiredReleaseEncoded = [Convert]::ToBase64String(
+            [Text.Encoding]::Unicode.GetBytes(
+                $posixExpiredReleaseScript
+            )
+        )
+        $posixExpiredReleaseResult = Invoke-PrivateMarkerProcess `
+            -FileName $currentPowerShellExecutable `
+            -Arguments @(
+                '-NoProfile',
+                '-EncodedCommand',
+                $posixExpiredReleaseEncoded
+            ) `
+            -WorkingDirectory $tempRoot `
+            -IsolationRoot (
+                Join-Path $tempRoot 'posix-expired-release-isolation'
+            ) `
+            -TimeoutMilliseconds 500 `
+            -ForcePosixGateFailure 'release-delay'
+        Start-Sleep -Milliseconds 100
+        if (-not $posixExpiredReleaseResult.TimedOut -or
+            -not $posixExpiredReleaseResult.ContainmentEstablished -or
+            -not $posixExpiredReleaseResult.TreeStopped -or
+            (Test-Path -LiteralPath $posixExpiredReleaseSentinel)) {
+            Add-Failure 'Expected POSIX target release to remain blocked after the caller deadline.'
+        }
     }
 
     if (Test-PrivateMarkerWindowsHost) {
@@ -1831,6 +2214,25 @@ Add-Type `
         if (Test-Path -LiteralPath $slowGitSentinel) {
             Add-Failure 'Expected the timed-out synthetic Git process tree to be stopped before artifact creation.'
         }
+
+        # Git固有timeoutよりscan-wide残時間が先に尽きた場合は、同じchild
+        # timeoutでもscan-deadlineへ分類する。直前の対照ケースにより
+        # production Git timeoutのprocess-boundary分類も同時に固定する。
+        $scanWideGitDeadlineResult = Invoke-Scanner `
+            -ScanPath $timeoutRoot `
+            -EnvironmentOverrides @{ PATH = $syntheticGitDirectory } `
+            -AdditionalArguments @('-ScanDeadlineMilliseconds', '250')
+        if (-not (Test-FixedIntegrityFailureResult `
+                -Result $scanWideGitDeadlineResult `
+                -Reason 'scan-deadline' `
+                -SensitiveTexts @(
+                    $root,
+                    $tempRoot,
+                    $timeoutRoot,
+                    $syntheticGitPath
+                ))) {
+            Add-Failure "Expected a scan-wide-bounded Git timeout to use the scan-deadline contract. Output: $($scanWideGitDeadlineResult.Output.Trim())"
+        }
     }
 
     # success 側の規約例を 1 fixture へ集約し、各例を個別 process で再走査しない。
@@ -1885,17 +2287,73 @@ Add-Type `
     }
 
     # scan-wide 期限は実運用の120秒を延長できず、self-testだけがlower-only値で
-    # 最終報告まで同じ時計に含まれる fail-closed 経路を短時間で再現する。
+    # runtime期限を再現する。入力不正と同じ固定1行/exit 2へ閉じ、例外の
+    # source framingやローカルpathを一切出さない。
     $scanDeadlineResult = Invoke-Scanner `
         -ScanPath $cleanRoot `
         -EnvironmentOverrides @{ PATH = $emptyCommandPath } `
         -AdditionalArguments @('-ScanDeadlineMilliseconds', '1')
-    if ($scanDeadlineResult.ExitCode -eq 0 -or
-        $scanDeadlineResult.TimedOut -or
-        $scanDeadlineResult.Output -notmatch
-            'Private marker scan exceeded its scan-wide time budget\.' -or
-        $scanDeadlineResult.Output -match 'Private marker scan passed') {
-        Add-Failure "Expected the lower-only scan-wide deadline to fail before final success output. Output: $($scanDeadlineResult.Output.Trim())"
+    if (-not (Test-FixedIntegrityFailureResult `
+            -Result $scanDeadlineResult `
+            -Reason 'scan-deadline' `
+            -SensitiveTexts @(
+                $root,
+                $tempRoot,
+                $cleanRoot,
+                $scanner
+            ))) {
+        Add-Failure "Expected the elapsed scan-wide deadline to use the fixed exit-2 integrity contract. Output: $($scanDeadlineResult.Output.Trim())"
+    }
+
+    if (-not (Test-PrivateMarkerWindowsHost)) {
+        # POSIX gateがscan-wide残時間でreadyになれずhelper例外になった場合も、
+        # returned timeoutと同じscan-deadlineへ閉じる。fake Git targetの
+        # sentinelが無いことで、期限後にreleaseされていないことも確認する。
+        $gateTimeoutGitDirectory =
+            Join-Path $tempRoot 'posix-gate-timeout-git'
+        New-Item -ItemType Directory -Path $gateTimeoutGitDirectory |
+            Out-Null
+        $gateTimeoutGitPath = Join-Path $gateTimeoutGitDirectory 'git'
+        $gateTimeoutGitSentinel =
+            Join-Path $tempRoot 'posix-gate-timeout-git-ran.txt'
+        $gateTimeoutGitScript = (
+            "#!/bin/sh`n" +
+            "printf '%s\n' 'ran' > '$gateTimeoutGitSentinel'`n"
+        )
+        [IO.File]::WriteAllText(
+            $gateTimeoutGitPath,
+            $gateTimeoutGitScript,
+            [Text.UTF8Encoding]::new($false)
+        )
+        $gateTimeoutGitMode =
+            [IO.UnixFileMode]::UserRead -bor
+            [IO.UnixFileMode]::UserWrite -bor
+            [IO.UnixFileMode]::UserExecute
+        [IO.File]::SetUnixFileMode(
+            $gateTimeoutGitPath,
+            $gateTimeoutGitMode
+        )
+        $gateTimeoutExceptionResult = Invoke-Scanner `
+            -ScanPath $cleanRoot `
+            -EnvironmentOverrides @{ PATH = $gateTimeoutGitDirectory } `
+            -AdditionalArguments @(
+                '-ScanDeadlineMilliseconds',
+                '100',
+                '-TestGitPosixGateFailure',
+                'delay'
+            )
+        if (-not (Test-FixedIntegrityFailureResult `
+                -Result $gateTimeoutExceptionResult `
+                -Reason 'scan-deadline' `
+                -SensitiveTexts @(
+                    $root,
+                    $tempRoot,
+                    $cleanRoot,
+                    $gateTimeoutGitPath
+                )) -or
+            (Test-Path -LiteralPath $gateTimeoutGitSentinel)) {
+            Add-Failure "Expected a scan-wide POSIX gate timeout exception to use scan-deadline without releasing the Git target. Output: $($gateTimeoutExceptionResult.Output.Trim())"
+        }
     }
 
     # non-Git fallback は nested `.git` directory だけでなく leaf gitfile も読まない。

@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -191,6 +192,7 @@ namespace PrivateMarker
         public Stream StandardInput { get; private set; }
         public Stream StandardOutput { get; private set; }
         public Stream StandardError { get; private set; }
+        public bool TargetReleased { get; private set; }
         public static int LastSyntheticFailureProcessId { get; private set; }
 
         private ContainedProcess(
@@ -199,12 +201,14 @@ namespace PrivateMarker
             Stream standardOutput,
             Stream standardError,
             IntPtr job,
+            bool targetReleased,
             int syntheticJobCloseFailures)
         {
             processHandle = childProcess;
             StandardInput = standardInput;
             StandardOutput = standardOutput;
             StandardError = standardError;
+            TargetReleased = targetReleased;
             jobHandle = job;
             syntheticJobCloseFailuresRemaining =
                 syntheticJobCloseFailures;
@@ -233,7 +237,15 @@ namespace PrivateMarker
                 {
                 }
             }
-            CloseOwnedHandle(ref processHandle);
+            try
+            {
+                CloseOwnedHandle(ref processHandle);
+            }
+            catch
+            {
+                // finalizer threadへ例外を逃がさない。通常のDispose経路では
+                // ownershipを保持したまま呼出元へcleanup failureを返す。
+            }
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -428,12 +440,62 @@ namespace PrivateMarker
             return Marshal.StringToHGlobalUni(block);
         }
 
+        private static Exception MergeCleanupFailure(
+            Exception existingFailure,
+            Exception nextFailure)
+        {
+            return existingFailure == null
+                ? nextFailure
+                : (Exception)new AggregateException(
+                    existingFailure,
+                    nextFailure);
+        }
+
+        private static void CaptureCleanupFailure(
+            Action cleanup,
+            ref Exception cleanupFailure)
+        {
+            try
+            {
+                cleanup();
+            }
+            catch (Exception failure)
+            {
+                cleanupFailure = MergeCleanupFailure(
+                    cleanupFailure,
+                    failure);
+            }
+        }
+
         private static void CloseOwnedHandle(ref IntPtr handle)
         {
             if (handle != IntPtr.Zero)
             {
-                CloseHandle(handle);
+                if (!CloseHandle(handle))
+                {
+                    throw new Win32Exception(
+                        Marshal.GetLastWin32Error(),
+                        "Closing an owned native handle failed.");
+                }
+                // close成功後だけownershipを手放す。失敗時はref値を保持し、
+                // Dispose/finalizerまたはlaunch cleanupの次段で再試行する。
                 handle = IntPtr.Zero;
+            }
+        }
+
+        private static void CaptureOwnedHandleClose(
+            ref IntPtr handle,
+            ref Exception cleanupFailure)
+        {
+            try
+            {
+                CloseOwnedHandle(ref handle);
+            }
+            catch (Exception failure)
+            {
+                cleanupFailure = MergeCleanupFailure(
+                    cleanupFailure,
+                    failure);
             }
         }
 
@@ -442,8 +504,14 @@ namespace PrivateMarker
             string[] arguments,
             IDictionary environment,
             string workingDirectory,
-            string testFailureMode)
+            string testFailureMode,
+            Stopwatch deadlineClock,
+            long deadlineMilliseconds)
         {
+            if (deadlineClock == null)
+            {
+                throw new ArgumentNullException("deadlineClock");
+            }
             if (!String.IsNullOrEmpty(testFailureMode))
             {
                 LastSyntheticFailureProcessId = 0;
@@ -465,6 +533,7 @@ namespace PrivateMarker
             var processCreated = false;
             var processAssigned = false;
             var attributeListInitialized = false;
+            Exception primaryFailure = null;
             try
             {
                 var attributes = new SecurityAttributes {
@@ -613,25 +682,49 @@ namespace PrivateMarker
                 CloseOwnedHandle(ref stdoutWrite);
                 CloseOwnedHandle(ref stderrWrite);
 
-                // Job割当後・resume前もtarget codeは未実行である。Job close
-                // cleanupとprocess tableからの消滅をself-testで実測する。
+                // test-only delayでCreateProcess/Job assign中のdeadline消費を
+                // 決定的に再現し、resume直前の同一clock判定をself-testする。
                 if (String.Equals(
-                        testFailureMode,
-                        "resume",
-                        StringComparison.Ordinal) ||
-                    String.Equals(
-                        testFailureMode,
-                        "resume-close",
-                        StringComparison.Ordinal))
+                    testFailureMode,
+                    "deadline",
+                    StringComparison.Ordinal))
                 {
-                    throw new InvalidOperationException(
-                        "Synthetic ResumeThread failure.");
+                    System.Threading.Thread.Sleep(50);
                 }
-                if (ResumeThread(processInformation.Thread) == ResumeFailed)
+
+                var targetReleased = false;
+                if (deadlineClock.ElapsedMilliseconds < deadlineMilliseconds)
                 {
-                    throw new Win32Exception(
-                        Marshal.GetLastWin32Error(),
-                        "ResumeThread failed.");
+                    // Job割当後・resume前もtarget codeは未実行である。Job close
+                    // cleanupとprocess tableからの消滅をself-testで実測する。
+                    if (String.Equals(
+                            testFailureMode,
+                            "resume",
+                            StringComparison.Ordinal) ||
+                        String.Equals(
+                            testFailureMode,
+                            "resume-close",
+                            StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            "Synthetic ResumeThread failure.");
+                    }
+                    if (ResumeThread(processInformation.Thread) == ResumeFailed)
+                    {
+                        throw new Win32Exception(
+                            Marshal.GetLastWin32Error(),
+                            "ResumeThread failed.");
+                    }
+                    targetReleased = true;
+                    if (String.Equals(
+                        testFailureMode,
+                        "deadline",
+                        StringComparison.Ordinal))
+                    {
+                        // deadline checkをmutationで除いた場合にtarget sentinelが
+                        // 確実に観測可能になるまで、test seam内だけで待つ。
+                        System.Threading.Thread.Sleep(100);
+                    }
                 }
                 CloseOwnedHandle(ref processInformation.Thread);
 
@@ -641,6 +734,7 @@ namespace PrivateMarker
                     stdout,
                     stderr,
                     job,
+                    targetReleased,
                     String.Equals(
                         testFailureMode,
                         "close",
@@ -723,54 +817,107 @@ namespace PrivateMarker
                 }
                 if (cleanupFailure != null)
                 {
-                    throw new AggregateException(
+                    primaryFailure = new AggregateException(
                         "Contained child launch cleanup failed.",
                         launchFailure,
                         cleanupFailure);
+                    throw primaryFailure;
                 }
+                primaryFailure = launchFailure;
                 throw;
             }
             finally
             {
+                // cleanupごとに例外境界を分け、先頭のclose/Dispose失敗でも
+                // 後続resourceを全て試す。primary failureは必ずaggregateへ残す。
+                Exception finalCleanupFailure = null;
                 if (environmentBlock != IntPtr.Zero)
                 {
-                    Marshal.FreeHGlobal(environmentBlock);
+                    CaptureCleanupFailure(
+                        () => Marshal.FreeHGlobal(environmentBlock),
+                        ref finalCleanupFailure);
                 }
                 if (attributeListInitialized)
                 {
-                    DeleteProcThreadAttributeList(attributeList);
+                    CaptureCleanupFailure(
+                        () => DeleteProcThreadAttributeList(attributeList),
+                        ref finalCleanupFailure);
                 }
                 if (attributeList != IntPtr.Zero)
                 {
-                    Marshal.FreeHGlobal(attributeList);
+                    CaptureCleanupFailure(
+                        () => Marshal.FreeHGlobal(attributeList),
+                        ref finalCleanupFailure);
                 }
                 if (inheritedHandleList != IntPtr.Zero)
                 {
-                    Marshal.FreeHGlobal(inheritedHandleList);
+                    CaptureCleanupFailure(
+                        () => Marshal.FreeHGlobal(inheritedHandleList),
+                        ref finalCleanupFailure);
                 }
-                CloseOwnedHandle(ref stdinRead);
-                CloseOwnedHandle(ref stdinWrite);
-                CloseOwnedHandle(ref stdoutRead);
-                CloseOwnedHandle(ref stdoutWrite);
-                CloseOwnedHandle(ref stderrRead);
-                CloseOwnedHandle(ref stderrWrite);
-                CloseOwnedHandle(ref processInformation.Thread);
-                CloseOwnedHandle(ref processInformation.Process);
+                CaptureOwnedHandleClose(
+                    ref stdinRead,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref stdinWrite,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref stdoutRead,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref stdoutWrite,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref stderrRead,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref stderrWrite,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref processInformation.Thread,
+                    ref finalCleanupFailure);
+                CaptureOwnedHandleClose(
+                    ref processInformation.Process,
+                    ref finalCleanupFailure);
                 if (job != IntPtr.Zero)
                 {
-                    ProcessBoundary.Close(job);
+                    CaptureCleanupFailure(
+                        () => {
+                            ProcessBoundary.Close(job);
+                            job = IntPtr.Zero;
+                        },
+                        ref finalCleanupFailure);
                 }
                 if (stdin != null)
                 {
-                    stdin.Dispose();
+                    CaptureCleanupFailure(
+                        () => stdin.Dispose(),
+                        ref finalCleanupFailure);
                 }
                 if (stdout != null)
                 {
-                    stdout.Dispose();
+                    CaptureCleanupFailure(
+                        () => stdout.Dispose(),
+                        ref finalCleanupFailure);
                 }
                 if (stderr != null)
                 {
-                    stderr.Dispose();
+                    CaptureCleanupFailure(
+                        () => stderr.Dispose(),
+                        ref finalCleanupFailure);
+                }
+                if (finalCleanupFailure != null)
+                {
+                    if (primaryFailure != null)
+                    {
+                        throw new AggregateException(
+                            "Contained child launch and cleanup failed.",
+                            primaryFailure,
+                            finalCleanupFailure);
+                    }
+                    throw new AggregateException(
+                        "Contained child cleanup failed.",
+                        finalCleanupFailure);
                 }
             }
         }
@@ -851,22 +998,29 @@ namespace PrivateMarker
             {
                 return;
             }
-            try
+            // 各resourceを独立して回収し、先頭例外で後続stream/native handleを
+            // skipしない。失敗時はdisposed=falseとownershipを保持して再試行可能にする。
+            Exception cleanupFailure = null;
+            CaptureCleanupFailure(
+                () => CloseJob(),
+                ref cleanupFailure);
+            CaptureCleanupFailure(
+                () => StandardInput.Dispose(),
+                ref cleanupFailure);
+            CaptureCleanupFailure(
+                () => StandardOutput.Dispose(),
+                ref cleanupFailure);
+            CaptureCleanupFailure(
+                () => StandardError.Dispose(),
+                ref cleanupFailure);
+            CaptureOwnedHandleClose(
+                ref processHandle,
+                ref cleanupFailure);
+            if (cleanupFailure != null)
             {
-                CloseJob();
-            }
-            finally
-            {
-                try
-                {
-                    StandardInput.Dispose();
-                    StandardOutput.Dispose();
-                    StandardError.Dispose();
-                }
-                finally
-                {
-                    CloseOwnedHandle(ref processHandle);
-                }
+                throw new AggregateException(
+                    "Contained process cleanup failed.",
+                    cleanupFailure);
             }
             disposed = true;
             GC.SuppressFinalize(this);
@@ -921,6 +1075,23 @@ function Test-PrivateMarkerWindowsHost {
         # RuntimeInformation が無い旧hostでも、ambient変数ではなくruntime特性を使う。
         return [System.IO.Path]::DirectorySeparatorChar -eq [char]92
     }
+}
+
+function Test-PrivateMarkerByteArraysEqual {
+    param(
+        [byte[]]$Expected,
+        [byte[]]$Actual
+    )
+
+    if ($Expected.Length -ne $Actual.Length) {
+        return $false
+    }
+    for ($index = 0; $index -lt $Expected.Length; $index++) {
+        if ($Expected[$index] -ne $Actual[$index]) {
+            return $false
+        }
+    }
+    return $true
 }
 
 function ConvertTo-PrivateMarkerProcessArgument {
@@ -1240,8 +1411,13 @@ function Invoke-PrivateMarkerProcess {
 
         # Windows suspended launchとJob close failure cleanupを検証する
         # self-test専用seam。production callerは常に空文字の既定値を使う。
-        [ValidateSet('', 'assign', 'resume', 'resume-close', 'close')]
-        [string]$ForceWindowsLaunchFailure = ''
+        [ValidateSet('', 'assign', 'resume', 'resume-close', 'close', 'deadline')]
+        [string]$ForceWindowsLaunchFailure = '',
+
+        # POSIX ready protocolのPID/nonce/raw-byte/deadline違反を決定的に
+        # 再現するself-test専用seam。production callerは空文字から変更しない。
+        [ValidateSet('', 'forged-pid', 'forged-nonce', 'bom', 'partial', 'delay', 'release-delay')]
+        [string]$ForcePosixGateFailure = ''
     )
 
     if ($SanitizeGitEnvironment -and [string]::IsNullOrWhiteSpace($IsolationRoot)) {
@@ -1252,6 +1428,9 @@ function Invoke-PrivateMarkerProcess {
         throw 'Standard input exceeds the bounded process byte limit.'
     }
 
+    # environment準備、OS launch、POSIX gate、target待機を同じmonotonic
+    # deadlineへ含める。tree/stream cleanupの有限猶予だけは別枠で保持する。
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $process = $null
     $containedProcess = $null
     $processStarted = $false
@@ -1274,6 +1453,9 @@ function Invoke-PrivateMarkerProcess {
     $exitCode = -1
     $stdoutBytes = New-Object byte[] 0
     $stderrBytes = New-Object byte[] 0
+    $primaryProcessFailure = $null
+    $cleanupFailures =
+        New-Object System.Collections.Generic.List[System.Exception]
 
     try {
         # 子へ渡す environment は親 process の clone から作り、親自身は変更しない。
@@ -1309,10 +1491,52 @@ function Invoke-PrivateMarkerProcess {
                     [string[]]$Arguments,
                     $childEnvironment,
                     $WorkingDirectory,
-                    $ForceWindowsLaunchFailure
+                    $ForceWindowsLaunchFailure,
+                    $clock,
+                    $TimeoutMilliseconds
                 )
             }
             catch {
+                if ($ForceWindowsLaunchFailure -ceq 'resume-close') {
+                    # Windows PowerShell 5.1はAggregateException.Messageから
+                    # inner fixed messagesを省略する。test-only seamでは実際の
+                    # aggregateを検査し、primary/cleanupが各1回・順序どおり
+                    # 残る場合だけpublic境界へ固定診断として再構成する。
+                    $syntheticAggregate = $_.Exception
+                    for ($aggregateDepth = 0;
+                        $aggregateDepth -lt 8 -and
+                        $null -ne $syntheticAggregate -and
+                        $syntheticAggregate -isnot [AggregateException];
+                        $aggregateDepth++) {
+                        $syntheticAggregate =
+                            $syntheticAggregate.InnerException
+                    }
+                    $syntheticMessages = @()
+                    if ($syntheticAggregate -is [AggregateException]) {
+                        $syntheticMessages = @(
+                            $syntheticAggregate.Flatten().InnerExceptions |
+                                ForEach-Object { [string]$_.Message }
+                        )
+                    }
+                    $resumePrimaryMessage =
+                        'Synthetic ResumeThread failure.'
+                    $assignedJobCleanupMessage =
+                        'Synthetic assigned Job close failure.'
+                    if ($syntheticMessages.Count -eq 2 -and
+                        $syntheticMessages[0] -ceq $resumePrimaryMessage -and
+                        $syntheticMessages[1] -ceq
+                            $assignedJobCleanupMessage) {
+                        throw (
+                            'Failed to start atomically contained child process: ' +
+                            $resumePrimaryMessage + ' ' +
+                            $assignedJobCleanupMessage
+                        )
+                    }
+                    throw (
+                        'Failed to start atomically contained child process: ' +
+                        'synthetic launch aggregation contract failed.'
+                    )
+                }
                 throw "Failed to start atomically contained child process: $($_.Exception.Message)"
             }
             $stdinStream = $containedProcess.StandardInput
@@ -1320,6 +1544,11 @@ function Invoke-PrivateMarkerProcess {
             $stderrStream = $containedProcess.StandardError
             $processStarted = $true
             $containmentEstablished = $true
+            if (-not $containedProcess.TargetReleased) {
+                # suspended targetをreleaseしなかった期限切れも通常のtimeout
+                # resultへ畳み、finallyのJob cleanupでtreeを有限回収する。
+                $timedOut = $true
+            }
         } else {
             $effectiveFileName = $FileName
             $effectiveArguments = @($Arguments)
@@ -1333,9 +1562,9 @@ function Invoke-PrivateMarkerProcess {
                 $useNativePosixSessionGate = $true
             }
 
-            # external setsid / native setsid のどちらも、session確立後のchild PIDを
-            # ready fileで返す。同じPIDがPGIDであることを親がkernelへ確認するまで
-            # target payloadをreleaseせず、launch直後のESRCH raceを閉じる。
+            # external setsid / native setsid のどちらも、session確立後の
+            # direct launcher PID + launch nonceをatomic ready recordで返す。
+            # 同じPIDがPGIDであることを親がkernelへ確認するまでtargetをreleaseしない。
             $gateRoot = if ([string]::IsNullOrWhiteSpace($IsolationRoot)) {
                 [System.IO.Path]::GetTempPath()
             } else {
@@ -1346,6 +1575,7 @@ function Invoke-PrivateMarkerProcess {
                     Out-Null
             }
             $gateId = [Guid]::NewGuid().ToString('N')
+            $gateNonce = [Guid]::NewGuid().ToString('N')
             $posixGateReadyPath =
                 Join-Path $gateRoot "private-marker-posix-ready-$gateId"
             $posixGateReleasePath =
@@ -1362,6 +1592,14 @@ function Invoke-PrivateMarkerProcess {
             )
             $releasePathBase64 = [Convert]::ToBase64String(
                 [System.Text.Encoding]::UTF8.GetBytes($posixGateReleasePath)
+            )
+            $readyNonceBase64 = [Convert]::ToBase64String(
+                [System.Text.Encoding]::ASCII.GetBytes($gateNonce)
+            )
+            $readyFailureBase64 = [Convert]::ToBase64String(
+                [System.Text.Encoding]::ASCII.GetBytes(
+                    $ForcePosixGateFailure
+                )
             )
             $posixWrapperTemplate = @'
 Set-StrictMode -Version Latest
@@ -1400,13 +1638,57 @@ try {
     $releasePath = [Text.Encoding]::UTF8.GetString(
         [Convert]::FromBase64String('__RELEASE_PATH__')
     )
-    [IO.File]::WriteAllText(
-        $readyPath,
-        [Diagnostics.Process]::GetCurrentProcess().Id.ToString(
-            [Globalization.CultureInfo]::InvariantCulture
-        ),
-        [Text.UTF8Encoding]::new($false)
+    $readyNonce = [Text.Encoding]::ASCII.GetString(
+        [Convert]::FromBase64String('__READY_NONCE__')
     )
+    $readyFailure = [Text.Encoding]::ASCII.GetString(
+        [Convert]::FromBase64String('__READY_FAILURE__')
+    )
+    if ($readyFailure -ceq 'delay') {
+        Start-Sleep -Milliseconds 250
+    }
+    $currentProcessId = [Diagnostics.Process]::GetCurrentProcess().Id
+    $readyProcessId = if ($readyFailure -ceq 'forged-pid') {
+        $currentProcessId + 1
+    } else {
+        $currentProcessId
+    }
+    # PIDとrecord長が正しくてもlaunch nonceが一致しなければ、別launchの
+    # stale/forged readyとして親が必ず拒否できるfixtureを作る。
+    $readyRecordNonce = if ($readyFailure -ceq 'forged-nonce') {
+        $replacementPrefix = if ($readyNonce[0] -ceq '0') { '1' } else { '0' }
+        $replacementPrefix + $readyNonce.Substring(1)
+    } else {
+        $readyNonce
+    }
+    $readyRecord = (
+        $readyProcessId.ToString(
+            [Globalization.CultureInfo]::InvariantCulture
+        ) + ':' + $readyRecordNonce
+    )
+    [byte[]]$readyBytes = [Text.Encoding]::ASCII.GetBytes($readyRecord)
+    if ($readyFailure -ceq 'bom') {
+        [byte[]]$readyBytes =
+            @([byte]0xEF, [byte]0xBB, [byte]0xBF) + @($readyBytes)
+    } elseif ($readyFailure -ceq 'partial') {
+        [byte[]]$readyBytes = [Text.Encoding]::ASCII.GetBytes(
+            $readyProcessId.ToString(
+                [Globalization.CultureInfo]::InvariantCulture
+            )
+        )
+    }
+    # temp siblingを完全writeしてからrenameし、readerへpartial recordを見せない。
+    $readyTempPath =
+        $readyPath + '.tmp-' + [Guid]::NewGuid().ToString('N')
+    try {
+        [IO.File]::WriteAllBytes($readyTempPath, $readyBytes)
+        [IO.File]::Move($readyTempPath, $readyPath)
+    }
+    finally {
+        if ([IO.File]::Exists($readyTempPath)) {
+            [IO.File]::Delete($readyTempPath)
+        }
+    }
     $released = $false
     for ($gateAttempt = 0; $gateAttempt -lt 3000; $gateAttempt++) {
         if ([IO.File]::Exists($releasePath)) {
@@ -1449,6 +1731,12 @@ catch {
             ).Replace(
                 '__RELEASE_PATH__',
                 $releasePathBase64
+            ).Replace(
+                '__READY_NONCE__',
+                $readyNonceBase64
+            ).Replace(
+                '__READY_FAILURE__',
+                $readyFailureBase64
             ).Replace(
                 '__PAYLOAD__',
                 $payloadBase64
@@ -1515,56 +1803,108 @@ catch {
             }
             $posixGateReady = $false
             $readyProcessId = 0
-            for ($gateAttempt = 0;
-                $gateAttempt -lt 2000;
-                $gateAttempt++) {
+            $posixGateRecordRejected = $false
+            $expectedReadyRecord = (
+                $process.Id.ToString(
+                    [System.Globalization.CultureInfo]::InvariantCulture
+                ) + ':' + $gateNonce
+            )
+            [byte[]]$expectedReadyBytes =
+                [System.Text.Encoding]::ASCII.GetBytes(
+                    $expectedReadyRecord
+                )
+            while ($clock.ElapsedMilliseconds -lt
+                $TimeoutMilliseconds) {
                 if ([System.IO.File]::Exists($posixGateReadyPath)) {
                     try {
-                        $readyProcessText = [System.IO.File]::ReadAllText(
-                            $posixGateReadyPath,
-                            [System.Text.Encoding]::UTF8
-                        )
-                        if ([int]::TryParse(
+                        [byte[]]$actualReadyBytes =
+                            [System.IO.File]::ReadAllBytes(
+                                $posixGateReadyPath
+                            )
+                        if (Test-PrivateMarkerByteArraysEqual `
+                                -Expected $expectedReadyBytes `
+                                -Actual $actualReadyBytes) {
+                            $readyProcessText =
+                                [System.Text.Encoding]::ASCII.GetString(
+                                    $actualReadyBytes
+                                )
+                            $readyProcessText = $readyProcessText.Substring(
+                                0,
+                                $readyProcessText.IndexOf(':')
+                            )
+                            if ([int]::TryParse(
                                 $readyProcessText,
                                 [System.Globalization.NumberStyles]::None,
                                 [System.Globalization.CultureInfo]::InvariantCulture,
                                 [ref]$readyProcessId
-                            ) -and $readyProcessId -gt 0) {
-                            $posixGateReady = $true
-                            break
+                            ) -and
+                                $readyProcessId -eq $process.Id) {
+                                $posixGateReady = $true
+                            }
+                        } else {
+                            $posixGateRecordRejected = $true
                         }
+                        break
                     }
                     catch {
-                        # create直後のempty/locked fileは次のbounded pollで再読する。
+                        # atomic rename後でも外部lockがあればdeadline内で再読する。
                     }
                 }
                 if ($process.HasExited) {
                     break
                 }
-                Start-Sleep -Milliseconds 5
+                $remainingGateMilliseconds =
+                    $TimeoutMilliseconds -
+                    $clock.ElapsedMilliseconds
+                if ($remainingGateMilliseconds -le 0) {
+                    break
+                }
+                Start-Sleep -Milliseconds (
+                    [Math]::Min(5, [int]$remainingGateMilliseconds)
+                )
             }
             if (-not $posixGateReady -or
+                $posixGateRecordRejected -or
+                $readyProcessId -ne $process.Id -or
                 -not [PrivateMarker.PosixSignal]::IsProcessGroupLeader(
                     $readyProcessId
                 )) {
-                [void](Stop-PrivateMarkerProcessTree -Process $process)
+                # gate/startup deadline後のtree回収は別枠の短い猶予で行い、
+                # 旧固定10秒pollや既定5秒waitをpublic timeoutへ足さない。
+                [void](Stop-PrivateMarkerProcessTree `
+                    -Process $process `
+                    -WaitMilliseconds 250)
                 throw 'Failed to establish the bounded POSIX session gate.'
             }
-            # ready PIDが実PGIDであることを確認してからreleaseするため、
-            # targetの最初の命令より先にcleanup先が確定する。
+            # direct launcher PID + nonceのexact recordと実PGIDを確認後だけ
+            # releaseし、別process groupへのsignal誤配送を防ぐ。
             $posixProcessGroupId = $readyProcessId
             $containmentEstablished = $true
-            try {
-                [System.IO.File]::WriteAllText(
-                    $posixGateReleasePath,
-                    'release',
-                    [System.Text.UTF8Encoding]::new($false)
-                )
+            if ($ForcePosixGateFailure -ceq 'release-delay') {
+                Start-Sleep -Milliseconds 600
             }
-            catch {
-                [void](Stop-PrivateMarkerPosixProcessGroup `
-                        -ProcessGroupId $posixProcessGroupId)
-                throw
+            if ($clock.ElapsedMilliseconds -ge $TimeoutMilliseconds) {
+                # PGID検証中に期限を跨いだ場合もrelease fileを書かず、
+                # verified groupを通常のtimeout cleanupへ渡す。
+                $timedOut = $true
+            } else {
+                try {
+                    [System.IO.File]::WriteAllText(
+                        $posixGateReleasePath,
+                        'release',
+                        [System.Text.UTF8Encoding]::new($false)
+                    )
+                    if ($ForcePosixGateFailure -ceq 'release-delay') {
+                        # deadline checkをmutationで除いた場合だけtarget sentinelを
+                        # 観測可能にするtest-only猶予。productionでは実行されない。
+                        Start-Sleep -Milliseconds 100
+                    }
+                }
+                catch {
+                    [void](Stop-PrivateMarkerPosixProcessGroup `
+                            -ProcessGroupId $posixProcessGroupId)
+                    throw
+                }
             }
             $stdinStream = $process.StandardInput.BaseStream
             $stdoutStream = $process.StandardOutput.BaseStream
@@ -1580,7 +1920,6 @@ catch {
             $MaximumStandardErrorBytes
         )
 
-        $clock = [System.Diagnostics.Stopwatch]::StartNew()
         $effectiveInputBytes = if ($null -eq $StandardInputBytes) {
             New-Object byte[] 0
         } else {
@@ -1633,10 +1972,23 @@ catch {
                 )
                 break
             }
+            # 100msはpoll上限であって追加猶予ではない。callerの単一deadlineの
+            # remainingへ縮め、短いtimeoutを固定waitで超過させない。
+            $remainingProcessMilliseconds =
+                $TimeoutMilliseconds - $clock.ElapsedMilliseconds
+            if ($remainingProcessMilliseconds -le 0) {
+                break
+            }
+            $processWaitMilliseconds =
+                [Math]::Min(100, [int]$remainingProcessMilliseconds)
             if ($null -ne $containedProcess) {
-                [void]$containedProcess.WaitForExit(100)
+                [void]$containedProcess.WaitForExit(
+                    $processWaitMilliseconds
+                )
             } else {
-                [void]$process.WaitForExit(100)
+                [void]$process.WaitForExit(
+                    $processWaitMilliseconds
+                )
             }
             $processHasExited = if ($null -ne $containedProcess) {
                 $containedProcess.HasExited
@@ -1752,36 +2104,48 @@ catch {
             $outputLimitExceeded = $outputLimitExceeded -or $stderrTask.Result.LimitExceeded
         }
     }
+    catch {
+        # finallyのcleanup失敗で元例外を置換しない。全resource回収後に
+        # primary + cleanupを一つのAggregateExceptionとして返す。
+        $primaryProcessFailure = $_.Exception
+    }
     finally {
         if ($processStarted) {
-            if ($null -ne $containedProcess) {
-                $stopResult = Stop-PrivateMarkerProcessTree `
-                    -Process $process `
-                    -ContainedProcess $containedProcess `
-                    -JobHandle ([IntPtr]::Zero) `
-                    -PosixProcessGroupId 0
-                $treeStopped = $treeStopped -and
-                    $stopResult.ProcessExited -and (
-                        $stopResult.JobClosed
-                    )
-            } elseif ($null -ne $process -and
-                $posixProcessGroupId -gt 0) {
-                # direct childが先に終了してもgroupは孫を指し続ける。
-                # finallyで必ずsignalし、pipeを持たない孫の副作用も止める。
-                $stopResult = Stop-PrivateMarkerProcessTree `
-                    -Process $process `
-                    -ContainedProcess $null `
-                    -JobHandle ([IntPtr]::Zero) `
-                    -PosixProcessGroupId $posixProcessGroupId
-                $treeStopped = $treeStopped -and
-                    $stopResult.ProcessExited
-            } elseif ($null -ne $process -and -not $process.HasExited) {
-                $stopResult = Stop-PrivateMarkerProcessTree `
-                    -Process $process `
-                    -ContainedProcess $null `
-                    -JobHandle ([IntPtr]::Zero) `
-                    -PosixProcessGroupId 0
-                $treeStopped = $treeStopped -and $stopResult.ProcessExited
+            try {
+                if ($null -ne $containedProcess) {
+                    $stopResult = Stop-PrivateMarkerProcessTree `
+                        -Process $process `
+                        -ContainedProcess $containedProcess `
+                        -JobHandle ([IntPtr]::Zero) `
+                        -PosixProcessGroupId 0
+                    $treeStopped = $treeStopped -and
+                        $stopResult.ProcessExited -and (
+                            $stopResult.JobClosed
+                        )
+                } elseif ($null -ne $process -and
+                    $posixProcessGroupId -gt 0) {
+                    # direct childが先に終了してもgroupは孫を指し続ける。
+                    # finallyで必ずsignalし、pipeを持たない孫の副作用も止める。
+                    $stopResult = Stop-PrivateMarkerProcessTree `
+                        -Process $process `
+                        -ContainedProcess $null `
+                        -JobHandle ([IntPtr]::Zero) `
+                        -PosixProcessGroupId $posixProcessGroupId
+                    $treeStopped = $treeStopped -and
+                        $stopResult.ProcessExited
+                } elseif ($null -ne $process -and -not $process.HasExited) {
+                    $stopResult = Stop-PrivateMarkerProcessTree `
+                        -Process $process `
+                        -ContainedProcess $null `
+                        -JobHandle ([IntPtr]::Zero) `
+                        -PosixProcessGroupId 0
+                    $treeStopped =
+                        $treeStopped -and $stopResult.ProcessExited
+                }
+            }
+            catch {
+                $treeStopped = $false
+                $cleanupFailures.Add($_.Exception) | Out-Null
             }
         }
         if (-not $stdinClosed -and $null -ne $stdinStream) {
@@ -1790,14 +2154,25 @@ catch {
             }
             catch {
                 $inputWriteFailed = $true
+                $cleanupFailures.Add($_.Exception) | Out-Null
             }
             $stdinClosed = $true
         }
         if ($null -ne $containedProcess) {
-            $containedProcess.Dispose()
+            try {
+                $containedProcess.Dispose()
+            }
+            catch {
+                $cleanupFailures.Add($_.Exception) | Out-Null
+            }
         }
         if ($null -ne $process) {
-            $process.Dispose()
+            try {
+                $process.Dispose()
+            }
+            catch {
+                $cleanupFailures.Add($_.Exception) | Out-Null
+            }
         }
         foreach ($gatePath in @(
             $posixGateReadyPath,
@@ -1808,10 +2183,32 @@ catch {
                     [System.IO.File]::Delete($gatePath)
                 }
                 catch {
-                    # cleanup artifact失敗はprocess tree判定へ影響させない。
+                    # gate artifactもresource ownershipの一部として集約し、
+                    # primary failureを置換せずfail-closedへ返す。
+                    $cleanupFailures.Add($_.Exception) | Out-Null
                 }
             }
         }
+    }
+
+    if ($null -ne $primaryProcessFailure -or
+        $cleanupFailures.Count -gt 0) {
+        if ($null -ne $primaryProcessFailure -and
+            $cleanupFailures.Count -eq 0) {
+            throw $primaryProcessFailure
+        }
+        $allProcessFailures =
+            New-Object System.Collections.Generic.List[System.Exception]
+        if ($null -ne $primaryProcessFailure) {
+            $allProcessFailures.Add($primaryProcessFailure) | Out-Null
+        }
+        foreach ($cleanupFailure in $cleanupFailures) {
+            $allProcessFailures.Add($cleanupFailure) | Out-Null
+        }
+        throw [System.AggregateException]::new(
+            'Bounded process execution or cleanup failed.',
+            [System.Exception[]]$allProcessFailures.ToArray()
+        )
     }
 
     $streamsCompleted = $null -ne $stdoutTask -and

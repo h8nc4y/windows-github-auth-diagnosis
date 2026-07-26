@@ -15,7 +15,12 @@ param(
     # isolation作成/削除の例外境界をself-testで決定的に通す専用seam。
     # production callerは空文字の既定値から変更しない。
     [ValidateSet('', 'isolation-create', 'isolation-remove')]
-    [string]$TestBoundaryFailure = ''
+    [string]$TestBoundaryFailure = '',
+
+    # POSIX gate startupがscan-wide期限でthrowする経路をself-testする。
+    # production callerは空文字のままで、target releaseを遅延しない。
+    [ValidateSet('', 'delay')]
+    [string]$TestGitPosixGateFailure = ''
 )
 
 Set-StrictMode -Version Latest
@@ -401,7 +406,9 @@ function Assert-PrivateMarkerScanDeadline {
     # Git childだけでなく、file列挙・decode・regex・結果serializeも同じ時計へ
     # 収める。capの各段階で呼び、CPU側へdeadline外処理を逃がさない。
     if ($scanClock.ElapsedMilliseconds -ge $maximumScanMilliseconds) {
-        throw 'Private marker scan exceeded its scan-wide time budget.'
+        # runtime期限超過も入力検証と同じ固定境界へ閉じ、PowerShellの例外
+        # framingからscanner pathやローカル作業pathを露出させない。
+        Stop-PrivateMarkerIntegrityFailure -Reason 'scan-deadline'
     }
 }
 
@@ -499,9 +506,16 @@ function Get-RemainingGitTimeoutMilliseconds {
     Assert-PrivateMarkerScanDeadline
     $remaining = $maximumScanMilliseconds - [int]$scanClock.ElapsedMilliseconds
     if ($remaining -le 0) {
-        throw 'Private marker scan exceeded its overall Git time budget.'
+        Stop-PrivateMarkerIntegrityFailure -Reason 'scan-deadline'
     }
-    return [Math]::Min($GitCommandTimeoutMilliseconds, $remaining)
+    return [pscustomobject]@{
+        TimeoutMilliseconds =
+            [Math]::Min($GitCommandTimeoutMilliseconds, $remaining)
+        # 残時間がGit固有上限以下なら、このchild timeoutの支配境界は
+        # scan-wide deadlineである。同値時も曖昧化せずscan-wideを優先する。
+        IsScanDeadlineBound =
+            $remaining -le $GitCommandTimeoutMilliseconds
+    }
 }
 
 function Invoke-ScannerGit {
@@ -511,21 +525,34 @@ function Invoke-ScannerGit {
         [byte[]]$StandardInputBytes = $null
     )
 
+    $gitTimeoutBudget = Get-RemainingGitTimeoutMilliseconds
     try {
-        return Invoke-PrivateMarkerProcess `
+        $result = Invoke-PrivateMarkerProcess `
             -FileName $gitExe.Source `
             -Arguments $Arguments `
             -StandardInputBytes $StandardInputBytes `
             -WorkingDirectory $canonicalRoot `
             -SanitizeGitEnvironment `
             -IsolationRoot $gitIsolationRoot `
-            -TimeoutMilliseconds (Get-RemainingGitTimeoutMilliseconds) `
-            -MaximumStandardOutputBytes $MaximumStandardOutputBytes
+            -TimeoutMilliseconds $gitTimeoutBudget.TimeoutMilliseconds `
+            -MaximumStandardOutputBytes $MaximumStandardOutputBytes `
+            -ForcePosixGateFailure $TestGitPosixGateFailure
     }
     catch {
         # provider/native例外が raw root path を含んでも外へ流さない。
+        # scan-wide残時間がchild capを支配し、同じclockが期限へ到達済みなら、
+        # returned timeoutでなくhelper throwでもscan-deadlineへ統一する。
+        if ($gitTimeoutBudget.IsScanDeadlineBound) {
+            Assert-PrivateMarkerScanDeadline
+        }
         Stop-PrivateMarkerIntegrityFailure -Reason 'process-boundary'
     }
+    if ($result.TimedOut -and $gitTimeoutBudget.IsScanDeadlineBound) {
+        # child boundaryがscan-wide残時間で切れた場合は、Git固有timeoutと
+        # 区別して固定scan-deadlineへ閉じる。path付き例外へは落とさない。
+        Stop-PrivateMarkerIntegrityFailure -Reason 'scan-deadline'
+    }
+    return $result
 }
 
 function Assert-HealthyGitBoundary {
