@@ -83,11 +83,17 @@ The format follows Keep a Changelog conventions.
 - Collapse missing/failing process helpers, unhealthy bounded children, and
   Git isolation creation/cleanup failures into one fixed, path-free
   `integrity: process-boundary` diagnostic with exit code 2.
-- Pin checkout to the reviewed v5 commit, add finite Windows and Ubuntu 24.04
-  job timeouts, run the scanner self-test under PowerShell 7 and Windows
-  PowerShell 5.1, and validate every workflow job/step/key against its owning
-  job block. Quoted or flow-style extra jobs, quoted top-level keys, and
-  active lines at unconsumed indentation are rejected.
+- Pin checkout to the reviewed v5 commit; add finite Windows, Ubuntu 24.04,
+  and macOS job timeouts; run the scanner self-test under PowerShell 7 and
+  Windows PowerShell 5.1; and verify the native POSIX `setsid(2)` fallback on
+  macOS. Every workflow job/step/key is validated against its owning job
+  block. Quoted or flow-style extra jobs, quoted top-level keys, and active
+  lines at unconsumed indentation are rejected.
+- Validate an exact Git worktree root through Git's strict
+  `--is-inside-work-tree=true` and empty `--show-prefix` records instead of
+  comparing host path strings. This rejects subdirectories and Git metadata
+  roots while accepting macOS system aliases for the same physical temporary
+  directory.
 
 ### Fixed
 

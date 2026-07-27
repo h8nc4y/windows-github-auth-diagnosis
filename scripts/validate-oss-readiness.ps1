@@ -3579,8 +3579,10 @@ jobs:
     name: Windows
   validate-ubuntu:
     name: Ubuntu
+  validate-macos:
+    name: macOS
 '@
-    $expectedJobs = @('validate', 'validate-ubuntu')
+    $expectedJobs = @('validate', 'validate-ubuntu', 'validate-macos')
     if (-not (Test-WorkflowEnvelopeSource `
         -Source $baseWorkflow `
         -ExpectedJobNames $expectedJobs)) {
@@ -4028,6 +4030,7 @@ Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'h
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'bearer-token-header' -Description 'token-shaped bearer header rule'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'emailPlaceholderAllowlist' -Description 'documentation-safe email allowlist'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern "Stop-PrivateMarkerIntegrityFailure\s+-Reason\s+'git-probe'" -Description 'fixed exit-2 Git metadata boundary'
+Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern "'rev-parse',\s*'--is-inside-work-tree',\s*'--show-prefix'" -Description 'Git-semantic exact worktree root boundary'
 Assert-FileContains -RelativePath 'scripts/check-whitespace.ps1' -Pattern '4b825dc642cb6eb9a060e54bf8d69288fbee4904' -Description 'empty-tree whitespace contract'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'Assert-PrivateMarkerScanDeadline' -Description 'scan-wide deadline enforcement'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern '(?s)\[object\]\$ScanDeadlineMilliseconds\s*=\s*120000' -Description 'fixed-diagnostic scan-wide deadline input seam'
@@ -4037,6 +4040,10 @@ Assert-GitTimeoutClassificationContractRegressions `
 Assert-FinalScanDeadlineContract -RelativePath 'scripts/scan-private-markers.ps1'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'maximumFindingOutputBytes' -Description 'actual UTF-8 finding output cap'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'private-marker-process\.ps1' -Description 'shared bounded process boundary in scanner self-test'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'linked worktree exact root' -Description 'linked-worktree exact-root positive control'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'submodule exact root' -Description 'submodule exact-root positive control'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'core\.worktree' -Description 'repo-local external worktree root regression fixture'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Git metadata root with an external worktree' -Description 'metadata-root false-clean rejection contract'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'PosixSignal.*IsSuccessfulResult' -Description 'POSIX errno cleanup regression coverage'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern '\[byte\[\]\]\$binaryProbeBytes\s*=\s*@\(0x00,\s*0x80,\s*0xFF\)' -Description 'exact binary standard-stream fixture'
 Assert-ReflectiveActivationGuardContractRegressions
@@ -4078,7 +4085,7 @@ Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Patte
 # 検証する。後続jobへ跨ぐregexによる誤合格を許さない。
 $workflowPath = '.github/workflows/validate.yml'
 $checkoutRevision = 'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09'
-$expectedWorkflowJobNames = @('validate', 'validate-ubuntu')
+$expectedWorkflowJobNames = @('validate', 'validate-ubuntu', 'validate-macos')
 Assert-WorkflowEnvelopeMutationRegressions
 Assert-WorkflowEnvelope `
     -RelativePath $workflowPath `
@@ -4144,6 +4151,38 @@ Assert-WorkflowStep -Steps $ubuntuSteps -JobName $ubuntuJobName `
     -Run './scripts/scan-private-markers.ps1'
 Assert-WorkflowStep -Steps $ubuntuSteps -JobName $ubuntuJobName `
     -Name 'Check whitespace on Ubuntu' -Shell 'pwsh' `
+    -Run './scripts/check-whitespace.ps1'
+
+# macOS jobは外部setsidが無いhostでnative setsid(2) fallbackを実行し、
+# Linuxだけでは見えないPOSIX process-group境界のportable contractを固定する。
+$macosJobName = 'validate-macos'
+$macosJobLines = @(Get-WorkflowJobLines `
+    -RelativePath $workflowPath `
+    -JobName $macosJobName)
+$macosSteps = @(Get-WorkflowSteps `
+    -Lines $macosJobLines `
+    -JobName $macosJobName)
+Assert-WorkflowJobValue -Lines $macosJobLines -JobName $macosJobName `
+    -Key 'runs-on' -ExpectedValue 'macos-latest'
+Assert-WorkflowJobValue -Lines $macosJobLines -JobName $macosJobName `
+    -Key 'timeout-minutes' -ExpectedValue '10'
+Assert-WorkflowStepCount -Steps $macosSteps -JobName $macosJobName `
+    -ExpectedCount 5
+Assert-WorkflowJobShape -Lines $macosJobLines -JobName $macosJobName `
+    -ExpectedStepCount 5 -ExpectedShellCount 4 -ExpectedRunCount 4
+Assert-WorkflowUsesStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Check out repository' -Uses $checkoutRevision
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Validate OSS readiness on macOS' -Shell 'pwsh' `
+    -Run './scripts/validate-oss-readiness.ps1'
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Test private marker scan (PowerShell 7 on macOS)' -Shell 'pwsh' `
+    -Run './scripts/test-scan-private-markers.ps1'
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Scan for private markers on macOS' -Shell 'pwsh' `
+    -Run './scripts/scan-private-markers.ps1'
+Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `
+    -Name 'Check whitespace on macOS' -Shell 'pwsh' `
     -Run './scripts/check-whitespace.ps1'
 
 Test-SkillFrontmatter

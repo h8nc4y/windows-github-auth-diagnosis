@@ -18,8 +18,8 @@ Thanks for improving this skill. This repository is intentionally small: changes
 5. Run the validation commands before opening a pull request.
 
 Scanner and workflow changes must preserve the bounded process helper, the
-PowerShell 7 / Windows PowerShell 5.1 / Ubuntu execution matrix, exact pinned
-checkout revision, finite job timeouts, and fail-closed Git/index/path
+PowerShell 7 / Windows PowerShell 5.1 / Ubuntu / macOS execution matrix, exact
+pinned checkout revision, finite job timeouts, and fail-closed Git/index/path
 boundary. On Windows, preserve suspended direct launch, Job assignment before
 resume, bounded launch-failure cleanup, and parent-first Job close before
 stream drain. A failed Job close must retain handle ownership for bounded
@@ -36,6 +36,10 @@ extra triggers, permissions,
 jobs, quoted/flow aliases of those mappings, and active lines outside the
 canonical indentation. Keep fixtures synthetic and verify native cleanup
 failures without printing environment values.
+Exact Git-root validation must require Git's strict inside-work-tree `true`
+record and empty relative prefix rather than host path string identity; this
+keeps subdirectories and metadata roots rejected without treating macOS system
+aliases as different physical roots.
 
 ## Validation
 
@@ -65,8 +69,9 @@ pwsh -NoProfile -File ./scripts/test-scan-private-markers.ps1
 pwsh -NoProfile -File ./scripts/scan-private-markers.ps1
 ```
 
-The GitHub workflow repeats these checks on `windows-latest` and Ubuntu 24.04.
-On Windows it also runs the scanner self-test with Windows PowerShell 5.1.
+The GitHub workflow repeats these checks on `windows-latest`, Ubuntu 24.04,
+and `macos-latest`. On Windows it also runs the scanner self-test with Windows
+PowerShell 5.1; macOS exercises the native `setsid(2)` fallback.
 Before committing, run `git diff --check`; the CI whitespace script compares
 the committed tree with Git's empty tree so a clean checkout is not a vacuous
 pass.

@@ -59,8 +59,9 @@ git diff --check
 
 CI（Validate workflow）は PR と `main` への push で同じ検査を実行する。
 Windows job は scanner self-test を PowerShell 7 と Windows PowerShell 5.1
-の両方で実行し、Ubuntu 24.04 job は POSIX process-group 経路を検証する。
-両 job は有限 timeout を持ち、checkout action は reviewed commit に固定する。
+の両方で実行し、Ubuntu 24.04 job は external `setsid` を含む POSIX
+process-group 経路、macOS job は native `setsid(2)` fallback を検証する。
+全 job は有限 timeout を持ち、checkout action は reviewed commit に固定する。
 workflow envelope は trigger / permission / job ID / active indentation を
 exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒否する。
 
@@ -73,7 +74,9 @@ exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒�
 - Git/index/file 境界、strict UTF-8、resource limit、child process cleanup
   を検証できない場合は fail closed。Git-backed mode は通常 stage-0
   index blob と tracked worktree の和集合を検査し、開始時・終了時の
-  index/flags drift も拒否する。
+  index/flags drift も拒否する。exact worktree root はhost path文字列では
+  なくGitのstrict inside-work-tree `true`＋empty `--show-prefix`で判定し、
+  system aliasを許容してもsubdirectoryとmetadata rootは拒否する。
 - `scripts/private-marker-process.ps1` は binary-safe stream、有限 timeout、
   Windows Job / POSIX process group cleanup、isolated Git environment の
   共通境界。scanner/test の双方で同じ helper を使い、個別の直接実行へ

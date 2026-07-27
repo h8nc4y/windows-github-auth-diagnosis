@@ -967,7 +967,13 @@ if ($null -eq $gitExe) {
     }
     try {
         $rootProbe = Invoke-ScannerGit `
-            -Arguments @('-C', $canonicalRoot, 'rev-parse', '--show-toplevel') `
+            -Arguments @(
+                '-C',
+                $canonicalRoot,
+                'rev-parse',
+                '--is-inside-work-tree',
+                '--show-prefix'
+            ) `
             -MaximumStandardOutputBytes 65536
         Assert-HealthyGitBoundary `
             -Result $rootProbe `
@@ -1001,29 +1007,25 @@ if ($null -eq $gitExe) {
                     -Bytes (Read-StableWorktreeBytes -FullPath $file.FullName -RelativePath $relative)
             }
         } else {
-            $reportedRootText = ConvertFrom-PrivateMarkerUtf8Bytes `
+            $reportedRootStateText = ConvertFrom-PrivateMarkerUtf8Bytes `
                 -Bytes $rootProbe.StandardOutputBytes `
                 -Context 'Git root probe stdout'
-            $reportedRootLines = @(
-                $reportedRootText -split '\r?\n' |
-                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-            )
-            if ($reportedRootLines.Count -ne 1) {
-                throw 'Git root probe returned malformed output.'
-            }
-            try {
-                $reportedRoot = [System.IO.Path]::GetFullPath(
-                    $reportedRootLines[0]
-                ).TrimEnd([char]92, [char]47)
-            }
-            catch {
-                throw 'Git root probe returned an invalid path.'
-            }
-            if (-not [string]::Equals(
-                $canonicalRoot,
-                $reportedRoot,
-                $pathComparison
-            )) {
+            # macOSのtemp pathは同じ物理directoryを`/var`と`/private/var`で
+            # 表すことがある。path文字列を比較せず、Git自身のinside-work-tree=trueと
+            # 空cwd相対prefixを1つの厳密record列で確認する。これにより物理rootの
+            # aliasを許容しつつ、subdirectoryとbare/metadata rootは同時に拒否する。
+            $isExactGitRoot =
+                [string]::Equals(
+                    $reportedRootStateText,
+                    "true`n`n",
+                    [System.StringComparison]::Ordinal
+                ) -or
+                [string]::Equals(
+                    $reportedRootStateText,
+                    "true`r`n`r`n",
+                    [System.StringComparison]::Ordinal
+                )
+            if (-not $isExactGitRoot) {
                 throw 'Scan path must be the exact Git worktree root; subdirectories are rejected.'
             }
 

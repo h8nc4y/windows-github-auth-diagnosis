@@ -65,3 +65,29 @@ jobs:
       - name: Check whitespace on Ubuntu
         shell: pwsh
         run: ./scripts/check-whitespace.ps1
+
+  validate-macos:
+    name: Validate skill repository on macOS
+    # pwsh / git とPOSIX process primitiveだけに依存するため標準latestを使う。
+    # 外部setsidを持たないmacOSでnative setsid(2) fallbackを実測する。
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Validate OSS readiness on macOS
+        shell: pwsh
+        run: ./scripts/validate-oss-readiness.ps1
+
+      - name: Test private marker scan (PowerShell 7 on macOS)
+        shell: pwsh
+        run: ./scripts/test-scan-private-markers.ps1
+
+      - name: Scan for private markers on macOS
+        shell: pwsh
+        run: ./scripts/scan-private-markers.ps1
+
+      - name: Check whitespace on macOS
+        shell: pwsh
+        run: ./scripts/check-whitespace.ps1
