@@ -1,6 +1,6 @@
 # TASKS_BACKLOG
 
-最終更新: 2026/07/27 JST（Codex: T-013 native macOS CI 実装・検証中）
+最終更新: 2026/07/27 JST（Codex: T-013 native macOS CI 完了）
 
 本ファイルがタスク台帳の正本。運用ルール・ゲート・検証手順は `docs/AGENT_BRIEF.md`、現在地サマリは `HANDOFF.md` を参照。着手時は `git status` / `git log` / `gh pr list` / `gh issue list` / `gh release list` の実状態を一次情報とする。
 
@@ -24,7 +24,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-010 | 上流 issue への skill 紹介コメント投稿 | 低 | **blocked・ゲート③** | 外部発信のため owner 承認まで着手しない。対象候補は openai/codex #21821 / #17459 等 |
 | T-011 | SKILL.md 明確化2点（transient retry / 環境変数 token 注記） | 中 | done | PR #18。2026-07-22 に最新 `main` との仮マージを両 PowerShell ランタイムで検証後に merge。main CI pass |
 | T-012 | private-marker scanner の hermetic / bounded process hardening | 高 | **done・Class M** | PR #26、merge commit `6ffb095`。PS5.1限定retry、POSIX PID+nonce provenance、primary/cleanup aggregation、resume/release直前を含むsingle deadline、native ownership、returned/throw両経路のscan-wide child timeout分類、conditional state dominance、case-insensitiveなdynamic Type/member/`::new()`/`New-Object` reflective activation拒否を統合。PR current-head / main push の Windows・Ubuntu CI と post-main cross-runtime 検証を通過 |
-| T-013 | native macOS process-group 検証の評価 | 中 | **doing・Class M** | PR #28。standard public `macos-latest` job と exact-envelope validatorを追加。初回CIでmacOS temp rootのsystem aliasを文字列不一致として誤拒否したため、exact root判定をGitのstrict `--is-inside-work-tree=true`＋empty `--show-prefix`へ修正し、bare metadata root＋別`core.worktree`のfalse-clean回帰も拒否。Windows / Ubuntuはpass、macOS再実行は`未確認`。paid/private larger runner、tag、Releaseとは独立 |
+| T-013 | native macOS process-group 検証の評価 | 中 | **done・Class M** | PR #28、merge commit `c5d5da9`。standard public `macos-latest` job と exact-envelope validatorを追加。macOS system aliasをGitのstrict `--is-inside-work-tree=true`＋empty `--show-prefix`で許容し、bare metadata root＋別`core.worktree`のfalse-clean回帰を拒否。PR current-head / main pushのWindows・Ubuntu・macOS CIとローカルcross-runtime full suiteを通過。paid/private larger runner、tag、Releaseとは独立 |
 
 ## 履歴（要約）
 
