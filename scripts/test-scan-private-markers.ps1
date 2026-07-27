@@ -1688,19 +1688,31 @@ finally {
                 $posixExpiredReleaseScript
             )
         )
-        $posixExpiredReleaseResult = Invoke-PrivateMarkerProcess `
-            -FileName $currentPowerShellExecutable `
-            -Arguments @(
-                '-NoProfile',
-                '-EncodedCommand',
-                $posixExpiredReleaseEncoded
-            ) `
-            -WorkingDirectory $tempRoot `
-            -IsolationRoot (
-                Join-Path $tempRoot 'posix-expired-release-isolation'
-            ) `
-            -TimeoutMilliseconds 500 `
-            -ForcePosixGateFailure 'release-delay'
+        $posixExpiredReleaseResult = $null
+        try {
+            # macOS native wrapperはcold Add-Typeを含む。sub-second起動を
+            # 成功条件にせず5秒でreadyを待ち、その後のtest-only 5.5秒delayで
+            # 同じcaller deadlineを確実に跨いでrelease禁止を検証する。
+            $posixExpiredReleaseResult = Invoke-PrivateMarkerProcess `
+                -FileName $currentPowerShellExecutable `
+                -Arguments @(
+                    '-NoProfile',
+                    '-EncodedCommand',
+                    $posixExpiredReleaseEncoded
+                ) `
+                -WorkingDirectory $tempRoot `
+                -IsolationRoot (
+                    Join-Path $tempRoot 'posix-expired-release-isolation'
+                ) `
+                -TimeoutMilliseconds 5000 `
+                -ForcePosixGateFailure 'release-delay'
+        }
+        catch {
+            # path・引数・inner messageを再掲せず、失敗fixtureだけを固定する。
+            throw [System.InvalidOperationException]::new(
+                'POSIX release-deadline fixture failed before deadline validation.'
+            )
+        }
         Start-Sleep -Milliseconds 100
         if (-not $posixExpiredReleaseResult.TimedOut -or
             -not $posixExpiredReleaseResult.ContainmentEstablished -or
