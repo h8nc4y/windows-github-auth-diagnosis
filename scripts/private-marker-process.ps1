@@ -1881,7 +1881,10 @@ catch {
             $posixProcessGroupId = $readyProcessId
             $containmentEstablished = $true
             if ($ForcePosixGateFailure -ceq 'release-delay') {
-                Start-Sleep -Milliseconds 600
+                # test-only seamはmacOS native wrapperのcold Add-Type起動を
+                # deadline内で完了させた後にだけ期限を跨がせる。production値は
+                # 空文字のため、この5.5秒delayと追加待機は実運用で発生しない。
+                Start-Sleep -Milliseconds 5500
             }
             if ($clock.ElapsedMilliseconds -ge $TimeoutMilliseconds) {
                 # PGID検証中に期限を跨いだ場合もrelease fileを書かず、
