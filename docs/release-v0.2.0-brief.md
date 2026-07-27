@@ -23,7 +23,10 @@ The release remains blocked until the owner confirms the version number, target 
   job for the native `setsid(2)` fallback. The moving labels remain
   intentionally unpinned because this repository depends only on `pwsh`,
   `git`, and native process primitives.
-- Hardened private-marker scanning with additional synthetic secret-prefix coverage and redaction checks.
+- Hardened private-marker scanning with additional synthetic secret-prefix
+  coverage, redaction checks, and Git-semantic exact-root validation that
+  tolerates macOS system aliases while rejecting subdirectories and Git
+  metadata roots.
 - Clarified the diagnosis procedure: retry a transiently failing proof command once before classifying, and recognize an environment-variable token source as a valid healthy state when the remaining proof checks pass.
 - Recorded advisory review disposition so resolved local advisory docs are not reintroduced as active implementation tasks.
 

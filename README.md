@@ -178,7 +178,11 @@ is pinned to a reviewed commit.
 The scanner uses `scripts/private-marker-process.ps1` as a bounded,
 binary-safe child-process boundary. It scans the union of regular stage-0
 index blobs and tracked worktree files, rejects unsafe Git/index/path state,
-and fails closed when a repository boundary cannot be verified. Entry, byte,
+and fails closed when a repository boundary cannot be verified. The exact
+worktree-root check requires Git's strict inside-work-tree `true` record and an
+empty relative prefix rather than host path string identity. This rejects Git
+metadata roots and prevents system aliases from turning the same physical root
+into a false subdirectory result. Entry, byte,
 line, finding, diagnostic-output, child-process, and scan-wide limits prevent
 unbounded maintenance checks. On Windows, the direct target starts suspended,
 enters a kill-on-close Job before resume, and is removed with a bounded wait

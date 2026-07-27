@@ -21,6 +21,10 @@ Status: draft. Review and approve before using this text in a GitHub Release.
   intentionally unpinned because the workflow only depends on `pwsh`, `git`,
   and native process primitives; macOS verifies the native `setsid(2)`
   fallback used when no external `setsid` executable is available.
+- Exact Git worktree-root validation now requires Git's strict
+  inside-work-tree `true` record and empty relative prefix, rejecting
+  subdirectories and Git metadata roots without treating macOS system aliases
+  for the same physical temporary directory as different roots.
 - Handoff and backlog state now reflect that T-003, scanner hardening, and advisory disposition have been merged.
 
 ## Security And Safety

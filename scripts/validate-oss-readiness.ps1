@@ -4030,6 +4030,7 @@ Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'h
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'bearer-token-header' -Description 'token-shaped bearer header rule'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'emailPlaceholderAllowlist' -Description 'documentation-safe email allowlist'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern "Stop-PrivateMarkerIntegrityFailure\s+-Reason\s+'git-probe'" -Description 'fixed exit-2 Git metadata boundary'
+Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern "'rev-parse',\s*'--is-inside-work-tree',\s*'--show-prefix'" -Description 'Git-semantic exact worktree root boundary'
 Assert-FileContains -RelativePath 'scripts/check-whitespace.ps1' -Pattern '4b825dc642cb6eb9a060e54bf8d69288fbee4904' -Description 'empty-tree whitespace contract'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'Assert-PrivateMarkerScanDeadline' -Description 'scan-wide deadline enforcement'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern '(?s)\[object\]\$ScanDeadlineMilliseconds\s*=\s*120000' -Description 'fixed-diagnostic scan-wide deadline input seam'
@@ -4039,6 +4040,10 @@ Assert-GitTimeoutClassificationContractRegressions `
 Assert-FinalScanDeadlineContract -RelativePath 'scripts/scan-private-markers.ps1'
 Assert-FileContains -RelativePath 'scripts/scan-private-markers.ps1' -Pattern 'maximumFindingOutputBytes' -Description 'actual UTF-8 finding output cap'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'private-marker-process\.ps1' -Description 'shared bounded process boundary in scanner self-test'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'linked worktree exact root' -Description 'linked-worktree exact-root positive control'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'submodule exact root' -Description 'submodule exact-root positive control'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'core\.worktree' -Description 'repo-local external worktree root regression fixture'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Git metadata root with an external worktree' -Description 'metadata-root false-clean rejection contract'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'PosixSignal.*IsSuccessfulResult' -Description 'POSIX errno cleanup regression coverage'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern '\[byte\[\]\]\$binaryProbeBytes\s*=\s*@\(0x00,\s*0x80,\s*0xFF\)' -Description 'exact binary standard-stream fixture'
 Assert-ReflectiveActivationGuardContractRegressions

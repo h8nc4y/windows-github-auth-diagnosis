@@ -11,7 +11,7 @@
 - scanner は bounded process helper、Git/index/worktree/path/resource 境界、Windows Job / POSIX process-group cleanup、strict byte transport、固定診断、AST early-call gate、workflow exact envelope を共有する。
 - fresh review で、PS5.1 healthy cold-start限定retry、direct PID + nonce provenance、全resource cleanupとprimary保持、単一deadline、native ownership、scan-wide timeout分類、conditional state dominance、reflective class activation拒否まで統合した。production Git timeout 15秒は不変。
 - workflow 変更 PR はゲート①ではない。通常のローカル検証・review・current-head CI 後に merge できる。tag / GitHub Release / marketplace 公開の各ゲートは維持する。
-- **T-013（Class M）は実装・検証中**。standard public `macos-latest` jobで、external `setsid` が無いhostのnative `setsid(2)` fallbackを実測する。paid/private larger runnerは使用しない。
+- **T-013（Class M）PR #28は修正・再検証中**。standard public `macos-latest` jobでnative `setsid(2)` fallbackを実測する。初回CIはmacOS temp rootのsystem aliasを文字列不一致として誤拒否したため、exact root判定をGitのstrict inside-work-tree `true`＋empty prefixへ変更した。bare metadata root＋別`core.worktree`のfalse-cleanも回帰fixtureで拒否する。paid/private larger runnerは使用しない。
 
 ## 次の一手
 
@@ -28,4 +28,4 @@
 - post-main: PowerShell 7 / Windows PowerShell 5.1 の full self-test・readiness・repo scan、Linux PowerShell 7.5 の network-none / read-only full self-test・readiness・repo scan・whitespaceを実測し pass。
 - `git diff --check` pass。Gitleaks 8.30.1 は約632 KB・0 findings、Semgrep 1.165.0 は39 rules / 32 tracked files・0 findings。
 - local / remote の T-012 task branch は削除済み。履歴保全用 `backup/018-main-pre-align-20260629` は削除しない。
-- T-013 local WIP: validator-firstでmacOS job欠落をRED確認後、PowerShell 7 / 5.1のfull self-test・readiness・repo scan、Linux PowerShell 7.5のnetwork-none / read-only full self-test・readiness・repo scan・whitespaceを実測し pass。macOS native CIは `未確認`。
+- T-013: validator-firstでmacOS job欠落をRED確認後、PowerShell 7 / 5.1とLinux network-none / read-onlyのfull suiteをpass。PR #28初回CIはWindows / Ubuntu pass、macOS readiness pass後にpath alias誤拒否でfail。Git-semantic root判定はinside-work-tree＋empty prefixへ強化し、bare metadata root false-cleanの回帰testは修正前REDを実測。修正後のローカルcross-runtime full suiteはpass、follow-up current-head CIは `未確認`。

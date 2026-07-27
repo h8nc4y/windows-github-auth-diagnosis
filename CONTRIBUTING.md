@@ -36,6 +36,10 @@ extra triggers, permissions,
 jobs, quoted/flow aliases of those mappings, and active lines outside the
 canonical indentation. Keep fixtures synthetic and verify native cleanup
 failures without printing environment values.
+Exact Git-root validation must require Git's strict inside-work-tree `true`
+record and empty relative prefix rather than host path string identity; this
+keeps subdirectories and metadata roots rejected without treating macOS system
+aliases as different physical roots.
 
 ## Validation
 

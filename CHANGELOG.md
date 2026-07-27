@@ -89,6 +89,11 @@ The format follows Keep a Changelog conventions.
   macOS. Every workflow job/step/key is validated against its owning job
   block. Quoted or flow-style extra jobs, quoted top-level keys, and active
   lines at unconsumed indentation are rejected.
+- Validate an exact Git worktree root through Git's strict
+  `--is-inside-work-tree=true` and empty `--show-prefix` records instead of
+  comparing host path strings. This rejects subdirectories and Git metadata
+  roots while accepting macOS system aliases for the same physical temporary
+  directory.
 
 ### Fixed
 

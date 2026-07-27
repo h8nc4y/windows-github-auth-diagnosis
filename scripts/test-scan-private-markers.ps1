@@ -3211,6 +3211,159 @@ printf '%s\n' 'hook-fired' > '$($hookSentinel.Replace([string][char]92, '/'))'
         XDG_CONFIG_HOME = $ambientRoot
     }
 
+    # exact-root判定の強化で、`.git` gitfileを使う正当なrootまで拒否しない。
+    # linked worktreeとsubmoduleを実Gitで構築し、host pathの形ではなく
+    # inside-work-tree=true＋empty prefixという意味境界が両方を許可することを固定する。
+    $rootControlSource = Join-Path $tempRoot 'root control source'
+    $linkedWorktreeRoot = Join-Path $tempRoot 'linked worktree root'
+    $submoduleHostRoot = Join-Path $tempRoot 'submodule host root'
+    $submoduleRelativePath = 'nested-module'
+    foreach ($directory in @($rootControlSource, $submoduleHostRoot)) {
+        New-Item -ItemType Directory -Path $directory | Out-Null
+    }
+    Set-Content `
+        -LiteralPath (Join-Path $rootControlSource 'clean.txt') `
+        -Value 'synthetic clean root-control content' `
+        -Encoding UTF8
+    Set-Content `
+        -LiteralPath (Join-Path $submoduleHostRoot 'clean.txt') `
+        -Value 'synthetic clean submodule-host content' `
+        -Encoding UTF8
+    $fixtureCommitEmail = ('fixture' + '@' + 'example.invalid')
+    $rootControlSetup = @(
+        Invoke-HermeticGit `
+            -WorkingDirectory $rootControlSource `
+            -Arguments @('init', '--quiet') `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $rootControlSource `
+            -Arguments @('add', '--', 'clean.txt') `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $rootControlSource `
+            -Arguments @(
+                '-c',
+                'user.name=Synthetic Fixture',
+                '-c',
+                "user.email=$fixtureCommitEmail",
+                'commit',
+                '--quiet',
+                '-m',
+                'synthetic root control'
+            ) `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $rootControlSource `
+            -Arguments @(
+                'worktree',
+                'add',
+                '--detach',
+                '--quiet',
+                $linkedWorktreeRoot,
+                'HEAD'
+            ) `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $submoduleHostRoot `
+            -Arguments @('init', '--quiet') `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $submoduleHostRoot `
+            -Arguments @('add', '--', 'clean.txt') `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $submoduleHostRoot `
+            -Arguments @(
+                '-c',
+                'user.name=Synthetic Fixture',
+                '-c',
+                "user.email=$fixtureCommitEmail",
+                'commit',
+                '--quiet',
+                '-m',
+                'synthetic submodule host'
+            ) `
+            -IsolationRoot $fixtureIsolationRoot
+        Invoke-HermeticGit `
+            -WorkingDirectory $submoduleHostRoot `
+            -Arguments @(
+                '-c',
+                'protocol.file.allow=always',
+                'submodule',
+                'add',
+                '--quiet',
+                $rootControlSource,
+                $submoduleRelativePath
+            ) `
+            -IsolationRoot $fixtureIsolationRoot
+    )
+    if ($rootControlSetup | Where-Object {
+        $_.ExitCode -ne 0 -or $_.TimedOut -or -not $_.TreeStopped
+    }) {
+        Add-Failure 'Expected linked-worktree/submodule root control setup to succeed.'
+    } else {
+        $linkedWorktreeResult = Invoke-Scanner `
+            -ScanPath $linkedWorktreeRoot `
+            -EnvironmentOverrides $adversarialEnvironment
+        if ($linkedWorktreeResult.ExitCode -ne 0 -or
+            $linkedWorktreeResult.Output -notmatch 'git-tracked') {
+            Add-Failure "Expected a linked worktree exact root to remain accepted. Output: $($linkedWorktreeResult.Output.Trim())"
+        }
+
+        $submoduleRoot = Join-Path $submoduleHostRoot $submoduleRelativePath
+        $submoduleRootResult = Invoke-Scanner `
+            -ScanPath $submoduleRoot `
+            -EnvironmentOverrides $adversarialEnvironment
+        if ($submoduleRootResult.ExitCode -ne 0 -or
+            $submoduleRootResult.Output -notmatch 'git-tracked') {
+            Add-Failure "Expected a submodule exact root to remain accepted. Output: $($submoduleRootResult.Output.Trim())"
+        }
+    }
+
+    # `--show-prefix` の空recordだけではGit metadata rootも一致してしまう。
+    # repo-local core.worktreeはambient GIT_* sanitize後も有効なため、別worktreeを
+    # 設定したmetadata directoryをfalse-cleanとして誤受理しない契約を固定する。
+    $bareRoot = Join-Path $tempRoot 'bare repository root'
+    $bareWorktreeRoot = Join-Path $tempRoot 'bare repository external worktree'
+    foreach ($directory in @($bareRoot, $bareWorktreeRoot)) {
+        New-Item -ItemType Directory -Path $directory | Out-Null
+    }
+    $bareInit = Invoke-HermeticGit `
+        -WorkingDirectory $bareRoot `
+        -Arguments @('init', '--bare', '--quiet') `
+        -IsolationRoot $fixtureIsolationRoot
+    $bareAsWorktreeConfig = Invoke-HermeticGit `
+        -WorkingDirectory $tempRoot `
+        -Arguments @('--git-dir', $bareRoot, 'config', 'core.bare', 'false') `
+        -IsolationRoot $fixtureIsolationRoot
+    $bareExternalWorktreeConfig = Invoke-HermeticGit `
+        -WorkingDirectory $tempRoot `
+        -Arguments @(
+            '--git-dir',
+            $bareRoot,
+            'config',
+            'core.worktree',
+            $bareWorktreeRoot
+        ) `
+        -IsolationRoot $fixtureIsolationRoot
+    if (@(
+        $bareInit,
+        $bareAsWorktreeConfig,
+        $bareExternalWorktreeConfig
+    ) | Where-Object {
+        $_.ExitCode -ne 0 -or $_.TimedOut -or -not $_.TreeStopped
+    }) {
+        Add-Failure 'Expected bounded bare/core.worktree fixture setup to succeed.'
+    } else {
+        $bareRootResult = Invoke-Scanner `
+            -ScanPath $bareRoot `
+            -EnvironmentOverrides $adversarialEnvironment
+        if ($bareRootResult.ExitCode -eq 0 -or
+            $bareRootResult.Output -notmatch 'exact Git worktree root') {
+            Add-Failure "Expected a Git metadata root with an external worktree to fail closed. Output: $($bareRootResult.Output.Trim())"
+        }
+    }
+
     $repositoryWithoutGitResult = Invoke-Scanner `
         -ScanPath $trackedRoot `
         -EnvironmentOverrides @{ PATH = $emptyCommandPath }
