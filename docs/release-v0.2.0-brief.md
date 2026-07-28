@@ -18,11 +18,12 @@ The release remains blocked until the owner confirms the version number, target 
 
 - Added Claude Code install instructions while preserving the existing Codex-style skill path.
 - Revised README Non-Goals so distribution is in scope, while credential storage and unsafe auth repair advice stay out of scope.
-- Updated GitHub Actions validation to `actions/checkout@v5`, retained bounded
-  `windows-latest` / Ubuntu jobs, and added a bounded standard `macos-latest`
-  job for the native `setsid(2)` fallback. The moving labels remain
-  intentionally unpinned because this repository depends only on `pwsh`,
-  `git`, and native process primitives.
+- Updated GitHub Actions validation to the immutable `actions/checkout`
+  v7.0.1 commit with checkout credential persistence disabled, retained
+  bounded `windows-latest` / Ubuntu jobs, and added a bounded standard
+  `macos-latest` job for the native `setsid(2)` fallback. The moving labels
+  remain intentionally unpinned because this repository depends only on
+  `pwsh`, `git`, and native process primitives.
 - Hardened private-marker scanning with additional synthetic secret-prefix
   coverage, redaction checks, and Git-semantic exact-root validation that
   tolerates macOS system aliases while rejecting subdirectories and Git
