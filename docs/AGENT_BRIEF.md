@@ -62,6 +62,8 @@ Windows job は scanner self-test を PowerShell 7 と Windows PowerShell 5.1
 の両方で実行し、Ubuntu 24.04 job は external `setsid` を含む POSIX
 process-group 経路、macOS job は native `setsid(2)` fallback を検証する。
 全 job は有限 timeout を持ち、checkout action は reviewed commit に固定する。
+checkout credentialは後続stepへ永続化せず、exact validatorが
+`persist-credentials: false`を3 jobすべてで要求する。
 workflow envelope は trigger / permission / job ID / active indentation を
 exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒否する。
 

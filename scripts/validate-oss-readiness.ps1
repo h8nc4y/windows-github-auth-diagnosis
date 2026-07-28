@@ -3529,7 +3529,8 @@ function Test-WorkflowEnvelopeSource {
         '  [A-Za-z0-9_-]+:[ \t]*|' +
         '    [A-Za-z0-9_-]+:(?:[ \t].*)?|' +
         '      -[ \t]+[A-Za-z0-9_-]+:(?:[ \t].*)?|' +
-        '        [A-Za-z0-9_-]+:(?:[ \t].*)?' +
+        '        [A-Za-z0-9_-]+:(?:[ \t].*)?|' +
+        '          [A-Za-z0-9_-]+:(?:[ \t].*)?' +
         ')$'
     $unconsumedJobLines = @(
         $jobLines | Where-Object {
@@ -3744,6 +3745,7 @@ function Get-WorkflowSteps {
 
     $steps = New-Object System.Collections.Generic.List[object]
     $currentStep = $null
+    $activeStepMapping = ''
 
     foreach ($line in $Lines) {
         $nameMatch = [regex]::Match($line, '^      -[ \t]+name:[ \t]*(?<value>[^#\r\n]+?)[ \t]*$')
@@ -3756,15 +3758,23 @@ function Get-WorkflowSteps {
                 Shell = ''
                 Run = ''
                 Uses = ''
+                PersistCredentials = ''
                 ShellCount = 0
                 RunCount = 0
                 UsesCount = 0
+                WithCount = 0
+                PersistCredentialsCount = 0
             }
+            $activeStepMapping = ''
             continue
         }
 
         if ($null -eq $currentStep) {
             continue
+        }
+
+        if ($line -match '^        (?![ #\r\n]).+$') {
+            $activeStepMapping = ''
         }
 
         $shellMatch = [regex]::Match($line, '^        shell:[ \t]*(?<value>[^#\r\n]+?)[ \t]*$')
@@ -3781,10 +3791,32 @@ function Get-WorkflowSteps {
             continue
         }
 
-        $usesMatch = [regex]::Match($line, '^        uses:[ \t]*(?<value>[^#\r\n]+?)[ \t]*(?:#.*)?$')
+        $usesMatch = [regex]::Match(
+            $line,
+            '^        uses:[ \t]*(?<value>[^ \t#\r\n]+)(?:[ \t]+#.*)?[ \t]*$'
+        )
         if ($usesMatch.Success) {
             $currentStep.Uses = $usesMatch.Groups['value'].Value.Trim("'`"")
             $currentStep.UsesCount++
+            continue
+        }
+
+        $withMatch = [regex]::Match($line, '^        with:[ \t]*$')
+        if ($withMatch.Success) {
+            $currentStep.WithCount++
+            $activeStepMapping = 'with'
+            continue
+        }
+
+        $persistCredentialsMatch = [regex]::Match(
+            $line,
+            '^          persist-credentials:[ \t]*(?<value>[^ \t#\r\n]+)(?:[ \t]+#.*)?[ \t]*$'
+        )
+        if ($persistCredentialsMatch.Success -and
+            $activeStepMapping -ceq 'with') {
+            $currentStep.PersistCredentials =
+                $persistCredentialsMatch.Groups['value'].Value.Trim("'`"")
+            $currentStep.PersistCredentialsCount++
         }
     }
 
@@ -3808,7 +3840,7 @@ function Assert-WorkflowJobValue {
         [regex]::Escape($Key) +
         ':[ \t]*' +
         [regex]::Escape($ExpectedValue) +
-        '[ \t]*(?:#.*)?$')
+        '(?:[ \t]+#.*)?[ \t]*$')
     # `$Matches` は -match が更新するautomatic変数なので、結果collectionへ
     # 同名（PowerShellはcase-insensitive）を使わずPS5.1/PS7差を避ける。
     $keyPattern = '^    ' + [regex]::Escape($Key) + ':[ \t]*'
@@ -3837,7 +3869,9 @@ function Assert-WorkflowJobShape {
         [string]$JobName,
         [int]$ExpectedStepCount,
         [int]$ExpectedShellCount,
-        [int]$ExpectedRunCount
+        [int]$ExpectedRunCount,
+        [int]$ExpectedWithCount,
+        [int]$ExpectedNestedPropertyCount
     )
 
     # expected keyを残したまま `if: false`、continue-on-error、別action等を
@@ -3866,8 +3900,19 @@ function Assert-WorkflowJobShape {
     $usesKeyCount = @(
         $Lines | Where-Object { $_ -match '^        uses:[ \t]*' }
     ).Count
+    $withKeyCount = @(
+        $Lines | Where-Object { $_ -match '^        with:[ \t]*' }
+    ).Count
+    $nestedPropertyCount = @(
+        $Lines | Where-Object { $_ -match '^          (?![ #\r\n]).+$' }
+    ).Count
+    $persistCredentialsKeyCount = @(
+        $Lines | Where-Object {
+            $_ -match '^          persist-credentials:[ \t]*'
+        }
+    ).Count
     $expectedStepPropertyCount =
-        1 + $ExpectedShellCount + $ExpectedRunCount
+        1 + $ExpectedShellCount + $ExpectedRunCount + $ExpectedWithCount
 
     if ($jobEntryCount -ne 4 -or
         $nameKeyCount -ne 1 -or
@@ -3880,7 +3925,10 @@ function Assert-WorkflowJobShape {
     if ($stepPropertyCount -ne $expectedStepPropertyCount -or
         $shellKeyCount -ne $ExpectedShellCount -or
         $runKeyCount -ne $ExpectedRunCount -or
-        $usesKeyCount -ne 1) {
+        $usesKeyCount -ne 1 -or
+        $withKeyCount -ne $ExpectedWithCount -or
+        $nestedPropertyCount -ne $ExpectedNestedPropertyCount -or
+        $persistCredentialsKeyCount -ne $ExpectedWithCount) {
         Add-Failure "Workflow job '$JobName' contains an unexpected, missing, or duplicate step-level key."
     }
 }
@@ -3903,8 +3951,10 @@ function Assert-WorkflowStep {
     $step = $matches[0]
     if ($step.ShellCount -ne 1 -or
         $step.RunCount -ne 1 -or
-        $step.UsesCount -ne 0) {
-        Add-Failure "Workflow job '$JobName' step '$Name' must contain exactly one shell/run and no uses key."
+        $step.UsesCount -ne 0 -or
+        $step.WithCount -ne 0 -or
+        $step.PersistCredentialsCount -ne 0) {
+        Add-Failure "Workflow job '$JobName' step '$Name' must contain exactly one shell/run and no uses/with key."
     }
     if (-not $step.Shell.Equals($Shell, [System.StringComparison]::OrdinalIgnoreCase)) {
         Add-Failure "Workflow job '$JobName' step '$Name' must use shell '$Shell' (found '$($step.Shell)')."
@@ -3931,11 +3981,52 @@ function Assert-WorkflowUsesStep {
     $step = $matches[0]
     if ($step.UsesCount -ne 1 -or
         $step.ShellCount -ne 0 -or
-        $step.RunCount -ne 0) {
-        Add-Failure "Workflow job '$JobName' step '$Name' must contain exactly one uses key and no shell/run key."
+        $step.RunCount -ne 0 -or
+        $step.WithCount -ne 1 -or
+        $step.PersistCredentialsCount -ne 1) {
+        Add-Failure "Workflow job '$JobName' step '$Name' must contain one uses key, one with mapping, and no shell/run key."
     }
     if ($step.Uses -cne $Uses) {
         Add-Failure "Workflow job '$JobName' step '$Name' must use '$Uses' (found '$($step.Uses)')."
+    }
+    if ($step.PersistCredentials -cne 'false') {
+        Add-Failure "Workflow job '$JobName' step '$Name' must disable checkout credential persistence."
+    }
+}
+
+function Assert-WorkflowStepParserMutationRegressions {
+    param(
+        [string]$CheckoutRevision
+    )
+
+    $validLines = @(
+        '      - name: Check out repository',
+        "        uses: $CheckoutRevision",
+        '        with:',
+        '          persist-credentials: false'
+    )
+    $validSteps = @(Get-WorkflowSteps `
+        -Lines $validLines `
+        -JobName 'synthetic-valid-checkout')
+    if ($validSteps.Count -ne 1 -or
+        $validSteps[0].WithCount -ne 1 -or
+        $validSteps[0].PersistCredentialsCount -ne 1 -or
+        $validSteps[0].PersistCredentials -cne 'false') {
+        Add-Failure 'Workflow step parser rejected its valid checkout with mapping control.'
+    }
+
+    $misnestedLines = @(
+        '      - name: Check out repository',
+        "        uses: $CheckoutRevision",
+        '          persist-credentials: false',
+        '        with:'
+    )
+    $misnestedSteps = @(Get-WorkflowSteps `
+        -Lines $misnestedLines `
+        -JobName 'synthetic-misnested-checkout')
+    if ($misnestedSteps.Count -ne 1 -or
+        $misnestedSteps[0].PersistCredentialsCount -ne 0) {
+        Add-Failure 'Workflow step parser accepted persist-credentials without an active with parent.'
     }
 }
 
@@ -4085,9 +4176,11 @@ Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Patte
 # job blockを先に切り出し、timeout/runs-on/checkout/stepを所有job内だけで
 # 検証する。後続jobへ跨ぐregexによる誤合格を許さない。
 $workflowPath = '.github/workflows/validate.yml'
-$checkoutRevision = 'actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09'
+$checkoutRevision = 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
 $expectedWorkflowJobNames = @('validate', 'validate-ubuntu', 'validate-macos')
 Assert-WorkflowEnvelopeMutationRegressions
+Assert-WorkflowStepParserMutationRegressions `
+    -CheckoutRevision $checkoutRevision
 Assert-WorkflowEnvelope `
     -RelativePath $workflowPath `
     -ExpectedJobNames $expectedWorkflowJobNames
@@ -4105,7 +4198,8 @@ Assert-WorkflowJobValue -Lines $windowsJobLines -JobName $windowsJobName `
 Assert-WorkflowStepCount -Steps $windowsSteps -JobName $windowsJobName `
     -ExpectedCount 6
 Assert-WorkflowJobShape -Lines $windowsJobLines -JobName $windowsJobName `
-    -ExpectedStepCount 6 -ExpectedShellCount 5 -ExpectedRunCount 5
+    -ExpectedStepCount 6 -ExpectedShellCount 5 -ExpectedRunCount 5 `
+    -ExpectedWithCount 1 -ExpectedNestedPropertyCount 1
 Assert-WorkflowUsesStep -Steps $windowsSteps -JobName $windowsJobName `
     -Name 'Check out repository' -Uses $checkoutRevision
 Assert-WorkflowStep -Steps $windowsSteps -JobName $windowsJobName `
@@ -4138,7 +4232,8 @@ Assert-WorkflowJobValue -Lines $ubuntuJobLines -JobName $ubuntuJobName `
 Assert-WorkflowStepCount -Steps $ubuntuSteps -JobName $ubuntuJobName `
     -ExpectedCount 5
 Assert-WorkflowJobShape -Lines $ubuntuJobLines -JobName $ubuntuJobName `
-    -ExpectedStepCount 5 -ExpectedShellCount 4 -ExpectedRunCount 4
+    -ExpectedStepCount 5 -ExpectedShellCount 4 -ExpectedRunCount 4 `
+    -ExpectedWithCount 1 -ExpectedNestedPropertyCount 1
 Assert-WorkflowUsesStep -Steps $ubuntuSteps -JobName $ubuntuJobName `
     -Name 'Check out repository' -Uses $checkoutRevision
 Assert-WorkflowStep -Steps $ubuntuSteps -JobName $ubuntuJobName `
@@ -4170,7 +4265,8 @@ Assert-WorkflowJobValue -Lines $macosJobLines -JobName $macosJobName `
 Assert-WorkflowStepCount -Steps $macosSteps -JobName $macosJobName `
     -ExpectedCount 5
 Assert-WorkflowJobShape -Lines $macosJobLines -JobName $macosJobName `
-    -ExpectedStepCount 5 -ExpectedShellCount 4 -ExpectedRunCount 4
+    -ExpectedStepCount 5 -ExpectedShellCount 4 -ExpectedRunCount 4 `
+    -ExpectedWithCount 1 -ExpectedNestedPropertyCount 1
 Assert-WorkflowUsesStep -Steps $macosSteps -JobName $macosJobName `
     -Name 'Check out repository' -Uses $checkoutRevision
 Assert-WorkflowStep -Steps $macosSteps -JobName $macosJobName `

@@ -33,6 +33,7 @@
 ## 4. 版数・成功指標
 
 - **v0.2.0は妥当**: 0.1.0以降の変更（Claude Code install手順、Non-Goals改訂、CI checkout v5、scanner hardening）は追加的・非破壊で、pre-1.0のminor bumpが正直な表現。
+- **2026-07-28補足**: CI checkoutは公式verified v7.0.1 commitへ更新し、credential非永続化をexact validatorで固定した。診断契約や公開APIを変えないため、v0.2.0判断は不変。
 - **成功指標（無料枠のみ・バックエンドなし制約下の最小計測）**:
   - GitHub Insights traffic（views/clones、owner閲覧可）
   - stars / issue・discussion流入（特に「使った」報告と誤診報告ゼロの維持）

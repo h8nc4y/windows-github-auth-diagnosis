@@ -173,7 +173,8 @@ private-marker scan, and whitespace check on pull requests and pushes to
 PowerShell 5.1; Ubuntu 24.04 verifies the external `setsid` / POSIX path, and
 macOS verifies the native `setsid(2)` fallback used when no external `setsid`
 executable is available. All jobs have finite timeouts, and `actions/checkout`
-is pinned to a reviewed commit.
+is pinned to the reviewed v7.0.1 commit with checkout credential persistence
+disabled.
 
 The scanner uses `scripts/private-marker-process.ps1` as a bounded,
 binary-safe child-process boundary. It scans the union of regular stage-0

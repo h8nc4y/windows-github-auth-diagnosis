@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/07/27 JST（Codex: T-013 native macOS CI 完了）
+最終更新: 2026/07/28 JST（Codex: T-014 checkout v7 hardening 着手）
 
 運用ルール・ゲート・検証手順の正本は `docs/AGENT_BRIEF.md`、タスク台帳の正本は `TASKS_BACKLOG.md`。文書と実状態が食い違う場合は Git / GitHub の実状態を優先する。
 
@@ -12,12 +12,14 @@
 - fresh review で、PS5.1 healthy cold-start限定retry、direct PID + nonce provenance、全resource cleanupとprimary保持、単一deadline、native ownership、scan-wide timeout分類、conditional state dominance、reflective class activation拒否まで統合した。production Git timeout 15秒は不変。
 - workflow 変更 PR はゲート①ではない。通常のローカル検証・review・current-head CI 後に merge できる。tag / GitHub Release / marketplace 公開の各ゲートは維持する。
 - **T-013（Class M）は完了**。PR #28をsource commit `e78de08`、merge commit `c5d5da9`でmergeした。standard public `macos-latest`でnative `setsid(2)` fallbackを実測し、Gitのstrict inside-work-tree `true`＋empty prefixでmacOS system aliasを許容した。bare metadata root＋別`core.worktree`のfalse-cleanは回帰fixtureで拒否する。paid/private larger runnerは使用していない。
+- **T-014（Class M）は進行中**。公式最新`actions/checkout` v7.0.1のverified commitへ更新し、checkout credentialを後続stepへ残さない。workflow exact validator、release draft、両PowerShell runtime、Windows / Ubuntu / macOS CIを同じ変更で検証する。
 
 ## 次の一手
 
-1. **T-006 GitHub Release v0.2.0（ゲート①）**: owner の4点承認（version / target commit / 公開タイミング / notes本文）が揃うまで tag push / Release 作成をしない。
-2. **T-006 承認後**: `.claude-plugin/plugin.json` と `claude plugin validate --strict` を別PRで追加する。実装PRは通常review/CIでmergeできるが、marketplace公開はゲート③。
-3. **T-010（ゲート③）**: 上流 issue への紹介コメントは owner 承認まで行わない。
+1. **T-014**: checkout v7.0.1 pin、`persist-credentials: false`、exact validator、正本を統合し、current-head CI後に通常PRとしてmergeする。
+2. **T-006 GitHub Release v0.2.0（ゲート①）**: owner の4点承認（version / target commit / 公開タイミング / notes本文）が揃うまで tag push / Release 作成をしない。
+3. **T-006 承認後**: `.claude-plugin/plugin.json` と `claude plugin validate --strict` を別PRで追加する。実装PRは通常review/CIでmergeできるが、marketplace公開はゲート③。
+4. **T-010（ゲート③）**: 上流 issue への紹介コメントは owner 承認まで行わない。
 
 廃止済み integration や旧エージェント間メッセージングを復活させない。
 
