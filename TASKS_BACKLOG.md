@@ -1,6 +1,6 @@
 # TASKS_BACKLOG
 
-最終更新: 2026/07/28 JST（Codex: T-014 checkout v7 hardening 着手）
+最終更新: 2026/07/28 JST（Codex: T-014 checkout v7 hardening 完了）
 
 本ファイルがタスク台帳の正本。運用ルール・ゲート・検証手順は `docs/AGENT_BRIEF.md`、現在地サマリは `HANDOFF.md` を参照。着手時は `git status` / `git log` / `gh pr list` / `gh issue list` / `gh release list` の実状態を一次情報とする。
 
@@ -25,7 +25,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-011 | SKILL.md 明確化2点（transient retry / 環境変数 token 注記） | 中 | done | PR #18。2026-07-22 に最新 `main` との仮マージを両 PowerShell ランタイムで検証後に merge。main CI pass |
 | T-012 | private-marker scanner の hermetic / bounded process hardening | 高 | **done・Class M** | PR #26、merge commit `6ffb095`。PS5.1限定retry、POSIX PID+nonce provenance、primary/cleanup aggregation、resume/release直前を含むsingle deadline、native ownership、returned/throw両経路のscan-wide child timeout分類、conditional state dominance、case-insensitiveなdynamic Type/member/`::new()`/`New-Object` reflective activation拒否を統合。PR current-head / main push の Windows・Ubuntu CI と post-main cross-runtime 検証を通過 |
 | T-013 | native macOS process-group 検証の評価 | 中 | **done・Class M** | PR #28、merge commit `c5d5da9`。standard public `macos-latest` job と exact-envelope validatorを追加。macOS system aliasをGitのstrict `--is-inside-work-tree=true`＋empty `--show-prefix`で許容し、bare metadata root＋別`core.worktree`のfalse-clean回帰を拒否。PR current-head / main pushのWindows・Ubuntu・macOS CIとローカルcross-runtime full suiteを通過。paid/private larger runner、tag、Releaseとは独立 |
-| T-014 | `actions/checkout` v7.0.1 immutable pin＋credential非永続化 | 中 | **in progress・Class M** | 公式verified commitとNode 24 runtimeを照合し、3 jobをfull SHA＋`persist-credentials: false`へ更新する。exact workflow validator、release draft、PS7 / PS5.1 full suite、3OS current-head CIで回帰を確認する。tag / GitHub Release / marketplace公開とは独立 |
+| T-014 | `actions/checkout` v7.0.1 immutable pin＋credential非永続化 | 中 | **done・Class M** | PR #30、merge commit `46c6e5c`。公式verified commitとNode 24 runtimeを照合し、3 jobをfull SHA＋`persist-credentials: false`へ更新。active `with`親を追跡するexact validator、release draft、PS7 / PS5.1 full suite、PR / mainの3OS CIを通過。tag / GitHub Release / marketplace公開とは独立 |
 
 ## 履歴（要約）
 
@@ -41,6 +41,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - 2026/07/24: T-012 着手。`main` / `origin/main` `c664ecf`、open PR/issue 0件、Release 0件から branch を作成し、scanner process boundary と cross-runtime CI 回帰を統合中。
 - 2026/07/25: T-012 の独立 review 修正、cross-runtime 検証、commit / push、PR #26 作成まで完了。GitHub hosted Windows の PS5 cold start は test-only probe の上限だけ30秒へ調整し、production timeout は維持。当時の運用正本にあった workflow owner gate に従い merge は保留した。
 - 2026/07/27: PR #26 の fresh CI / process-boundary reviewを再実施し、Windows PS5.1のhealthy cold-startだけの1回retry、POSIX PID+nonce ready provenance、all-resource cleanup、primary failure保持、single deadline、native ownership、scan-wide child timeout分類、conditional state dominance、reflective class activation拒否を修正。独立review P0〜P3=0、PR current-head CI、merge commit `6ffb095` の main push CI、post-main の Windows両runtime / Linux network-none検証を通過した。現行方針に合わせ、workflow変更PRは通常のreview / current-head CI後にmerge可、tag / GitHub Releaseはゲート①のままと運用正本を同期した。
+- 2026/07/28: T-014（PR #30）で`actions/checkout` v7.0.1のverified immutable commitへ更新し、3OS jobのcredential persistenceを無効化。active parentを追跡するexact validatorとmutation回帰を追加し、独立review、PR / main 3OS CI、post-main cross-runtime full suiteを通過した。tag / GitHub Release / marketplace公開のowner gateは未変更。
 
 ## 外部レビュー指摘の台帳（2026-07-15 maxエフォート横断レビュー）
 

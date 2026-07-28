@@ -1,6 +1,6 @@
 # HANDOFF
 
-最終更新: 2026/07/28 JST（Codex: T-014 checkout v7 hardening 着手）
+最終更新: 2026/07/28 JST（Codex: T-014 checkout v7 hardening 完了）
 
 運用ルール・ゲート・検証手順の正本は `docs/AGENT_BRIEF.md`、タスク台帳の正本は `TASKS_BACKLOG.md`。文書と実状態が食い違う場合は Git / GitHub の実状態を優先する。
 
@@ -12,14 +12,13 @@
 - fresh review で、PS5.1 healthy cold-start限定retry、direct PID + nonce provenance、全resource cleanupとprimary保持、単一deadline、native ownership、scan-wide timeout分類、conditional state dominance、reflective class activation拒否まで統合した。production Git timeout 15秒は不変。
 - workflow 変更 PR はゲート①ではない。通常のローカル検証・review・current-head CI 後に merge できる。tag / GitHub Release / marketplace 公開の各ゲートは維持する。
 - **T-013（Class M）は完了**。PR #28をsource commit `e78de08`、merge commit `c5d5da9`でmergeした。standard public `macos-latest`でnative `setsid(2)` fallbackを実測し、Gitのstrict inside-work-tree `true`＋empty prefixでmacOS system aliasを許容した。bare metadata root＋別`core.worktree`のfalse-cleanは回帰fixtureで拒否する。paid/private larger runnerは使用していない。
-- **T-014（Class M）は進行中**。公式最新`actions/checkout` v7.0.1のverified commitへ更新し、checkout credentialを後続stepへ残さない。workflow exact validator、release draft、両PowerShell runtime、Windows / Ubuntu / macOS CIを同じ変更で検証する。
+- **T-014（Class M）は完了**。PR #30をsource commit `357ce63`、merge commit `46c6e5c`でmergeした。公式確認済み`actions/checkout` v7.0.1 immutable commitへ更新し、3 jobすべてでcheckout credential persistenceを無効化した。exact validatorはactiveな`with`親だけを受理し、不正ネストや無空白suffixを拒否する。
 
 ## 次の一手
 
-1. **T-014**: checkout v7.0.1 pin、`persist-credentials: false`、exact validator、正本を統合し、current-head CI後に通常PRとしてmergeする。
-2. **T-006 GitHub Release v0.2.0（ゲート①）**: owner の4点承認（version / target commit / 公開タイミング / notes本文）が揃うまで tag push / Release 作成をしない。
-3. **T-006 承認後**: `.claude-plugin/plugin.json` と `claude plugin validate --strict` を別PRで追加する。実装PRは通常review/CIでmergeできるが、marketplace公開はゲート③。
-4. **T-010（ゲート③）**: 上流 issue への紹介コメントは owner 承認まで行わない。
+1. **T-006 GitHub Release v0.2.0（ゲート①）**: owner の4点承認（version / target commit / 公開タイミング / notes本文）が揃うまで tag push / Release 作成をしない。
+2. **T-006 承認後**: `.claude-plugin/plugin.json` と `claude plugin validate --strict` を別PRで追加する。実装PRは通常review/CIでmergeできるが、marketplace公開はゲート③。
+3. **T-010（ゲート③）**: 上流 issue への紹介コメントは owner 承認まで行わない。
 
 廃止済み integration や旧エージェント間メッセージングを復活させない。
 
@@ -30,3 +29,4 @@
 - `git diff --check` pass。Gitleaks 8.30.1 は約632 KB・0 findings、Semgrep 1.165.0 は39 rules / 32 tracked files・0 findings。
 - local / remote の T-012 task branch は削除済み。履歴保全用 `backup/018-main-pre-align-20260629` は削除しない。
 - T-013: exact freeze `ccfac133`の独立reviewはP0〜P3=0。PR current-head run 30226964805はWindows / Ubuntu / macOSがsuccess。main push run 30227236800は初回Windows PS5.1のhealthy cold-start probe timeout後、failed-job attempt 2で3OSすべてsuccess。修正後のローカルcross-runtime full suiteとnative macOS `setsid(2)` fallbackを実測しpass。
+- T-014: exact freeze tree `42f25e6a` / binary diff `a2c0a188`の独立reviewはP0〜P3=0。PR current-head run 30334673818とmerge commit `46c6e5c`のmain push run 30335030526はWindows / Ubuntu / macOSがすべてsuccess。post-mainはPowerShell 7とWindows PowerShell 5.1を直列実行し、readiness・scanner self-test・tracked scanをすべてpass。並列試行では同時self-testの隔離rootを相互検出したため、source failureと混同しない。
