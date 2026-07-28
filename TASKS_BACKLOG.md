@@ -1,6 +1,6 @@
 # TASKS_BACKLOG
 
-最終更新: 2026/07/28 JST（Codex: T-014 checkout v7 hardening 完了）
+最終更新: 2026/07/29 JST（Codex: checkout v5→v7.0.1 の履歴関係を明確化）
 
 本ファイルがタスク台帳の正本。運用ルール・ゲート・検証手順は `docs/AGENT_BRIEF.md`、現在地サマリは `HANDOFF.md` を参照。着手時は `git status` / `git log` / `gh pr list` / `gh issue list` / `gh release list` の実状態を一次情報とする。
 
@@ -14,7 +14,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | --- | --- | --- | --- | --- |
 | T-001 | v0.1.0 公開準備 | 高 | done | PR #2 |
 | T-002 | Codex→Claude Code 引き継ぎ文書化 | 高 | done | `HANDOFF.md` 新設 |
-| T-003 | GitHub Actions 非推奨対応 | 高 | done | PR #4: `actions/checkout@v5`。`windows-latest` は pwsh+git のみ依存のため据え置き（理由は workflow 内コメント） |
+| T-003 | GitHub Actions 非推奨対応 | 高 | done | PR #4で当時の`actions/checkout@v5`へ更新。T-014 / PR #30でimmutable v7.0.1へsupersededし、checkout credentialは非永続化済み。runner方針は現行workflowコメントを参照 |
 | T-004 | README Non-Goals 改訂・配布解禁 | 高 | done | PR #3。認証情報の保存/管理・根拠なき rotate/reset 助言の禁止は安全 Non-Goal として維持 |
 | T-005 | Claude Code install 手順追加 | 高 | done | PR #3。frontmatter は両エージェント互換のため変更不要 |
 | T-006 | 初の GitHub Release 発行（推奨 `v0.2.0`） | 中 | **todo・ゲート①** | brief / notes draft は準備済み（`docs/release-v0.2.0-brief.md` / `docs/release-v0.2.0-notes-draft.md`）。owner の4点承認（version / target commit / 公開タイミング / notes 本文）が揃うまで tag push / Release 作成をしない |
