@@ -26,6 +26,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 | T-012 | private-marker scanner の hermetic / bounded process hardening | 高 | **done・Class M** | PR #26、merge commit `6ffb095`。PS5.1限定retry、POSIX PID+nonce provenance、primary/cleanup aggregation、resume/release直前を含むsingle deadline、native ownership、returned/throw両経路のscan-wide child timeout分類、conditional state dominance、case-insensitiveなdynamic Type/member/`::new()`/`New-Object` reflective activation拒否を統合。PR current-head / main push の Windows・Ubuntu CI と post-main cross-runtime 検証を通過 |
 | T-013 | native macOS process-group 検証の評価 | 中 | **done・Class M** | PR #28、merge commit `c5d5da9`。standard public `macos-latest` job と exact-envelope validatorを追加。macOS system aliasをGitのstrict `--is-inside-work-tree=true`＋empty `--show-prefix`で許容し、bare metadata root＋別`core.worktree`のfalse-clean回帰を拒否。PR current-head / main pushのWindows・Ubuntu・macOS CIとローカルcross-runtime full suiteを通過。paid/private larger runner、tag、Releaseとは独立 |
 | T-014 | `actions/checkout` v7.0.1 immutable pin＋credential非永続化 | 中 | **done・Class M** | PR #30、merge commit `46c6e5c`。公式verified commitとNode 24 runtimeを照合し、3 jobをfull SHA＋`persist-credentials: false`へ更新。active `with`親を追跡するexact validator、release draft、PS7 / PS5.1 full suite、PR / mainの3OS CIを通過。tag / GitHub Release / marketplace公開とは独立 |
+| T-015 | scanner self-test の並列host temp分離 | 中 | **reviewing・Class M** | self-test invocation固有のtemp rootへscanner subprocessとcleanup監査を限定し、別hostの同一prefix rootを誤検出・削除しないsynthetic回帰を追加。PS7 / PS5.1同時self-testと両hostのreadiness / marker scanを通過。scanner判定本体は変更しない |
 
 ## 履歴（要約）
 
@@ -42,6 +43,7 @@ windows-github-auth-diagnosis を Codex と Claude Code の両エージェント
 - 2026/07/25: T-012 の独立 review 修正、cross-runtime 検証、commit / push、PR #26 作成まで完了。GitHub hosted Windows の PS5 cold start は test-only probe の上限だけ30秒へ調整し、production timeout は維持。当時の運用正本にあった workflow owner gate に従い merge は保留した。
 - 2026/07/27: PR #26 の fresh CI / process-boundary reviewを再実施し、Windows PS5.1のhealthy cold-startだけの1回retry、POSIX PID+nonce ready provenance、all-resource cleanup、primary failure保持、single deadline、native ownership、scan-wide child timeout分類、conditional state dominance、reflective class activation拒否を修正。独立review P0〜P3=0、PR current-head CI、merge commit `6ffb095` の main push CI、post-main の Windows両runtime / Linux network-none検証を通過した。現行方針に合わせ、workflow変更PRは通常のreview / current-head CI後にmerge可、tag / GitHub Releaseはゲート①のままと運用正本を同期した。
 - 2026/07/28: T-014（PR #30）で`actions/checkout` v7.0.1のverified immutable commitへ更新し、3OS jobのcredential persistenceを無効化。active parentを追跡するexact validatorとmutation回帰を追加し、独立review、PR / main 3OS CI、post-main cross-runtime full suiteを通過した。tag / GitHub Release / marketplace公開のowner gateは未変更。
+- 2026/07/29: T-014 post-main self-testをPS7 / PS5.1で並列実行した際、system temp全体の同一prefix差分を各hostが自分の残骸と誤認するtest harness欠陥を確認。T-015としてinvocation固有tempと所有root限定cleanup監査へ修正し、両host同時self-test・readiness・marker scanを通過した。production scanner判定・timeout・公開gateは変更していない。
 
 ## 外部レビュー指摘の台帳（2026-07-15 maxエフォート横断レビュー）
 

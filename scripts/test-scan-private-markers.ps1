@@ -43,6 +43,7 @@ if (-not (Test-Path -LiteralPath $currentPowerShellExecutable -PathType Leaf)) {
 }
 
 $failures = New-Object System.Collections.Generic.List[string]
+$scannerInvocationTempRoot = $null
 
 function Add-Failure {
     param([string]$Message)
@@ -163,11 +164,25 @@ function Invoke-Scanner {
     }
     $arguments += @('-File', $ScannerPath, '-Path', $ScanPath)
     $arguments += $AdditionalArguments
+    $scannerEnvironmentOverrides = @{}
+    if (-not [string]::IsNullOrWhiteSpace($scannerInvocationTempRoot)) {
+        # scanner subprocessごとではなくself-test invocationごとにtemp rootを所有する。
+        # PS7 / PS5.1を並列実行しても、cleanup監査の対象を別hostと共有しない。
+        foreach ($tempVariableName in @('TEMP', 'TMP', 'TMPDIR')) {
+            $scannerEnvironmentOverrides[$tempVariableName] =
+                $scannerInvocationTempRoot
+        }
+    }
+    foreach ($environmentName in $EnvironmentOverrides.Keys) {
+        # isolation failure fixtureなど、呼出し側が明示した値は既定値より優先する。
+        $scannerEnvironmentOverrides["$environmentName"] =
+            $EnvironmentOverrides[$environmentName]
+    }
     $result = Invoke-PrivateMarkerProcess `
         -FileName $currentPowerShellExecutable `
         -Arguments $arguments `
         -WorkingDirectory $root `
-        -EnvironmentOverrides $EnvironmentOverrides `
+        -EnvironmentOverrides $scannerEnvironmentOverrides `
         -MaximumStandardOutputBytes 4194304 `
         -TimeoutMilliseconds 30000
     return ConvertTo-TestProcessResult -Result $result
@@ -338,17 +353,26 @@ if ($healthyHermeticTimeoutIsRetryable -ne $isWindowsPowerShell51) {
     Add-Failure 'Expected hermetic environment retry eligibility only on Windows PowerShell 5.1.'
 }
 
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("windows-github-auth-diagnosis-scan-test-" + [System.Guid]::NewGuid().ToString('N'))
+$systemTempRoot = [System.IO.Path]::GetTempPath()
+$tempRoot = Join-Path $systemTempRoot ("windows-github-auth-diagnosis-scan-test-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 $emptyCommandPath = Join-Path $tempRoot 'empty-command-path'
 New-Item -ItemType Directory -Path $emptyCommandPath | Out-Null
-$preexistingScannerIsolationRoots = @(
-    Get-ChildItem -LiteralPath ([System.IO.Path]::GetTempPath()) `
-        -Directory `
-        -Filter 'windows-github-auth-diagnosis-git-*' `
-        -ErrorAction SilentlyContinue |
-        ForEach-Object { $_.Name }
+$scannerInvocationTempRoot = Join-Path $tempRoot 'scanner-invocation-temp'
+New-Item -ItemType Directory -Path $scannerInvocationTempRoot | Out-Null
+
+# 別hostが同時に所有するtemp/isolation rootをsyntheticに常駐させる。
+# 本self-testのcleanup監査はこのrootを残骸と誤認も削除もしてはならない。
+$parallelHarnessTempRoot = Join-Path $systemTempRoot (
+    'windows-github-auth-diagnosis-parallel-harness-' +
+    [System.Guid]::NewGuid().ToString('N')
 )
+$parallelHarnessIsolationRoot = Join-Path $parallelHarnessTempRoot (
+    'windows-github-auth-diagnosis-git-' +
+    [System.Guid]::NewGuid().ToString('N')
+)
+New-Item -ItemType Directory -Path $parallelHarnessTempRoot | Out-Null
+New-Item -ItemType Directory -Path $parallelHarnessIsolationRoot | Out-Null
 
 try {
     # process helperの初回呼出しを文字列化しやすいASCIIでは済ませない。
@@ -4130,28 +4154,28 @@ printf '%s\n' 'hook-fired' > '$($hookSentinel.Replace([string][char]92, '/'))'
         }
     }
 
-    # scanner が fixture 外の system temp に残す isolation root も差分で検出する。
+    # scanner subprocessへ渡したinvocation固有tempだけをcleanup監査する。
+    # system temp全体の同一prefixを比較すると、並列hostの正当なrootを誤検出する。
     $remainingScannerIsolationRoots = @(
-        Get-ChildItem -LiteralPath ([System.IO.Path]::GetTempPath()) `
+        Get-ChildItem -LiteralPath $scannerInvocationTempRoot `
             -Directory `
             -Filter 'windows-github-auth-diagnosis-git-*' `
             -ErrorAction SilentlyContinue |
             ForEach-Object { $_.Name }
     )
-    $newScannerIsolationRoots = @(
-        Compare-Object `
-            -ReferenceObject $preexistingScannerIsolationRoots `
-            -DifferenceObject $remainingScannerIsolationRoots |
-            Where-Object { $_.SideIndicator -eq '=>' } |
-            ForEach-Object { "$($_.InputObject)" }
-    )
-    if ($newScannerIsolationRoots.Count -gt 0) {
-        Add-Failure "Expected scanner isolation roots to be cleaned: $($newScannerIsolationRoots -join ', ')."
+    if ($remainingScannerIsolationRoots.Count -gt 0) {
+        Add-Failure "Expected owned scanner isolation roots to be cleaned: $($remainingScannerIsolationRoots -join ', ')."
+    }
+    if (-not (Test-Path -LiteralPath $parallelHarnessIsolationRoot -PathType Container)) {
+        Add-Failure 'Expected scanner cleanup audit to ignore another concurrent harness isolation root.'
     }
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $parallelHarnessTempRoot) {
+        Remove-Item -LiteralPath $parallelHarnessTempRoot -Recurse -Force
     }
 }
 
