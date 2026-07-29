@@ -4172,6 +4172,17 @@ Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Patte
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'scan-diagnostic-output-limit' -Description 'finding output amplification regression coverage'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected invalid ancestor Git metadata to fail closed with fixed exit 2' -Description 'ancestor Git metadata fail-closed regression'
 Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected invalid ancestor Gitfile metadata to fail closed with fixed exit 2' -Description 'ancestor Gitfile fail-closed regression'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern '\$scannerInvocationTempRoot\s*=\s*Join-Path \$tempRoot ''scanner-invocation-temp''' -Description 'self-test invocation-owned scanner temp root'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern '\$scannerEnvironmentOverrides\[\$tempVariableName\]\s*=\s*\$scannerInvocationTempRoot' -Description 'scanner subprocess temp ownership injection'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern '(?s)Get-ChildItem -LiteralPath \$scannerInvocationTempRoot.*?-Filter ''windows-github-auth-diagnosis-git-\*''' -Description 'owned-root-only scanner cleanup audit'
+Assert-FileContains -RelativePath 'scripts/test-scan-private-markers.ps1' -Pattern 'Expected scanner cleanup audit to ignore another concurrent harness isolation root' -Description 'parallel-host isolation regression'
+$scannerSelfTestSource = Get-Content `
+    -LiteralPath (Join-Path $root 'scripts/test-scan-private-markers.ps1') `
+    -Raw
+if ($scannerSelfTestSource -match
+    '(?s)Get-ChildItem\s+-LiteralPath\s+\(\[System\.IO\.Path\]::GetTempPath\(\)\).*?-Filter\s+''windows-github-auth-diagnosis-git-\*''') {
+    Add-Failure 'scripts/test-scan-private-markers.ps1 must not audit scanner isolation roots across the shared system temp.'
+}
 
 # job blockを先に切り出し、timeout/runs-on/checkout/stepを所有job内だけで
 # 検証する。後続jobへ跨ぐregexによる誤合格を許さない。

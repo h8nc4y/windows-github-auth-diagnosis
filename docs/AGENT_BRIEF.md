@@ -66,6 +66,10 @@ checkout credentialは後続stepへ永続化せず、exact validatorが
 `persist-credentials: false`を3 jobすべてで要求する。
 workflow envelope は trigger / permission / job ID / active indentation を
 exact 検証し、quoted key や flow mapping で追加jobを隠す変更も拒否する。
+scanner self-test は invocation 固有の `TEMP` / `TMP` / `TMPDIR` を
+scanner subprocessへ渡し、cleanup監査をその所有root内だけに限定する。
+PS7 / PS5.1など別hostが同時に作る同一prefixのrootは、残骸として
+誤検出も削除もしない。
 
 `scan-private-markers.ps1` の制約（スキャン対象は git-tracked ファイル。staged を含む）:
 
