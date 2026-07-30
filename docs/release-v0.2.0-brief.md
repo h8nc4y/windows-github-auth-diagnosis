@@ -28,6 +28,10 @@ The release remains blocked until the owner confirms the version number, target 
   coverage, redaction checks, and Git-semantic exact-root validation that
   tolerates macOS system aliases while rejecting subdirectories and Git
   metadata roots.
+- Isolated each scanner self-test invocation behind its own temporary root
+  and limited cleanup auditing to that owned root, so concurrent PowerShell
+  hosts do not report or remove another host's same-prefix test directory.
+  Production scanner decision logic and timeouts are unchanged.
 - Clarified the diagnosis procedure: retry a transiently failing proof command once before classifying, and recognize an environment-variable token source as a valid healthy state when the remaining proof checks pass.
 - Recorded advisory review disposition so resolved local advisory docs are not reintroduced as active implementation tasks.
 

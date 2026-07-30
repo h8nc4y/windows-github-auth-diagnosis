@@ -26,6 +26,11 @@ Status: draft. Review and approve before using this text in a GitHub Release.
   inside-work-tree `true` record and empty relative prefix, rejecting
   subdirectories and Git metadata roots without treating macOS system aliases
   for the same physical temporary directory as different roots.
+- Scanner self-tests now use an invocation-specific temporary root, audit
+  cleanup only inside that owned root, and include a synthetic concurrent-host
+  regression so one PowerShell host does not report or remove another host's
+  same-prefix test directory. Production scanner decision logic and timeouts
+  are unchanged.
 - Handoff and backlog state now reflect that T-003, scanner hardening, and advisory disposition have been merged.
 
 ## Security And Safety
